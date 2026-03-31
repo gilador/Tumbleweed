@@ -227,7 +227,7 @@ export function TermsOfServiceDialog({
               If you have questions about these terms, please open an issue on
               our{" "}
               <a
-                href="https://github.com/gilador/pakal-shmira/issues"
+                href="https://github.com/gilador/Tumbleweed/issues"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-600 hover:underline"

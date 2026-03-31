@@ -207,7 +207,7 @@ export function PrivacyPolicyDialog({
               If you have questions about this privacy policy or your data,
               please open an issue on our{" "}
               <a
-                href="https://github.com/gilador/pakal-shmira/issues"
+                href="https://github.com/gilador/Tumbleweed/issues"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-600 hover:underline"
