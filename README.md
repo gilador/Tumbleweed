@@ -27,7 +27,9 @@ The optimizer is powered by [HiGHS](https://highs.dev/) compiled to WebAssembly 
 
 ```bash
 npm install
-npm run dev     # localhost:5273
+npm run dev       # localhost:5273
+npm test          # Jest unit tests
+npm run test:e2e  # Playwright E2E (headless)
 ```
 
 ## License
