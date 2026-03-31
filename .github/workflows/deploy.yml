@@ -1,0 +1,76 @@
+name: Deploy to GitHub Pages
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+  workflow_dispatch:
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'mirror/'))
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Create .npmrc
+        run: echo "registry=https://registry.npmjs.org/" > .npmrc
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+
+      - name: Create Release and Tag
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v${VERSION}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if ! git ls-remote --tags origin "$TAG" | grep -q "$TAG"; then
+            git tag "$TAG"
+            git push origin "$TAG"
+          else
+            echo "Tag $TAG already exists, skipping tag creation"
+          fi
+
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --title "v${VERSION}" \
+              --notes "Synced from tumbleweed-platform core v${VERSION}" \
+              --latest
+          else
+            echo "Release $TAG already exists, skipping release creation"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: dist
+          branch: gh-pages
