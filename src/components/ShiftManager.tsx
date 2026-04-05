@@ -1,6 +1,6 @@
 import { Button } from "@/components/elements/button";
 import { useTranslation } from "react-i18next";
-import { IconBrandGithub, IconWand, IconLoader2, IconSettings, IconUser, IconLogin, IconLogout, IconAdjustments, IconAdjustmentsFilled } from "@tabler/icons-react";
+import { IconBrandGithub, IconWand, IconLoader2, IconSettings, IconUser, IconLogin, IconLogout, IconAdjustments, IconAdjustmentsFilled, IconX } from "@tabler/icons-react";
 import { Card, CardContent } from "@/components/elements/card";
 import {
   Dialog,
@@ -16,9 +16,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useMemo, useState, useRef, useEffect } from "react";
-import { useRecoilState } from "recoil";
+import { useRecoilState, useRecoilValue } from "recoil";
 import tumbleweedIcon from "../../assets/tumbleweed.svg";
-import { shiftState } from "../stores/shiftStore";
+import { shiftState, getActiveRosterFromState, shiftScheduleInfoSelector } from "../stores/shiftStore";
+import { RosterSwitcher } from "./RosterSwitcher";
 import { AvailabilityTableView } from "./AvailabilityTableView";
 import { EditButton } from "./EditButton";
 import { PostListActions } from "./PostListActions";
@@ -37,17 +38,85 @@ import { useToast } from "../hooks/useToast";
 import { ToastManager } from "./Toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { defaultHours } from "../constants/shiftManagerConstants";
-import { getOptimalShiftDuration } from "../service/shiftHourHelperService";
+
 import { useAuth } from "../lib/auth";
 import { ShareButton } from "./ShareButton";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { getSetting, setSetting } from "../lib/settings";
 import { enableDebugMode, disableDebugMode } from "../lib/analytics";
+import { ThemeSwitcher } from "./ThemeSwitcher";
+
+function ActionHint({ posts, staff, restTime, startTime, endTime, hasAssignments, isOptimized, shiftsCount, shiftDuration }: {
+  posts: number;
+  staff: number;
+  restTime: number;
+  startTime: string;
+  endTime: string;
+  hasAssignments: boolean;
+  isOptimized: boolean;
+  shiftsCount: number;
+  shiftDuration: number;
+}) {
+  const { t } = useTranslation();
+
+  // Calculate capacity
+  const [sh] = startTime.split(":").map(Number);
+  const [eh] = endTime.split(":").map(Number);
+  let opHours = eh - sh;
+  if (opHours <= 0) opHours += 24;
+  const maxWork = Math.max(0, opHours - Math.min(restTime, opHours * 0.8));
+  const capacity = staff * maxWork;
+  const needed = shiftsCount * posts * (isNaN(shiftDuration) ? 0 : shiftDuration);
+
+  let message = "";
+  let variant: "info" | "warning" | "success" = "info";
+
+  if (staff === 0) {
+    message = t("hintAddStaff");
+  } else if (posts === 0) {
+    message = t("hintAddPosts");
+  } else if (needed > capacity && capacity > 0) {
+    message = t("hintOverCapacity", {
+      capacity: capacity.toFixed(0),
+      needed: needed.toFixed(0),
+    });
+    variant = "warning";
+  } else if (shiftsCount === 0 || shiftDuration === 0 || isNaN(shiftDuration)) {
+    message = t("hintOverCapacity", {
+      capacity: capacity.toFixed(0),
+      needed: (opHours * posts).toFixed(0),
+    });
+    variant = "warning";
+  } else if (!hasAssignments && staff > 0 && posts > 0) {
+    message = t("hintRunOptimizer");
+  } else if (hasAssignments && !isOptimized) {
+    message = t("hintNotOptimized");
+  } else if (isOptimized) {
+    message = t("hintOptimized");
+    variant = "success";
+  }
+
+  if (!message) return null;
+
+  const colors = {
+    info: "text-muted-foreground bg-muted/50",
+    warning: "text-amber-700 bg-amber-50 dark:text-amber-400 dark:bg-amber-950/30",
+    success: "text-green-700 bg-green-50 dark:text-green-400 dark:bg-green-950/30",
+  };
+
+  return (
+    <div className={`ms-auto px-3 py-1 rounded-md text-xs text-end ${colors[variant]}`}>
+      {message}
+    </div>
+  );
+}
 
 export function ShiftManager() {
   const { t } = useTranslation();
   const { isAuthenticated, user, signInWithGoogle, signOut } = useAuth();
   const [recoilState] = useRecoilState(shiftState);
+  const activeRoster = getActiveRosterFromState(recoilState);
+  const scheduleInfo = useRecoilValue(shiftScheduleInfoSelector);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [shareDebugInfo, setShareDebugInfo] = useState(() => getSetting("shareDebugInfo"));
   const [showDebugDialog, setShowDebugDialog] = useState(false);
@@ -66,13 +135,14 @@ export function ShiftManager() {
 
   const [isEditing, setIsEditing] = useState(false);
   const [checkedUserIds, setCheckedUserIds] = useState<string[]>([]);
+  const lastCheckedUserRef = useRef<number | null>(null);
   const [showShiftSettings, setShowShiftSettings] = useState(false);
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
 
-  // Initialize the component and get the constraints signature ref
-  const { lastAppliedConstraintsSignature } = useShiftManagerInitialization();
+  // Initialize the component
+  useShiftManagerInitialization();
 
   // Use toast system
   const { toasts, removeToast, showSuccess, showError, showInfo } = useToast();
@@ -81,7 +151,6 @@ export function ShiftManager() {
   const { isOptimizeDisabled, optimizeButtonTitle, handleOptimize } =
     useShiftOptimization(
       isEditing,
-      lastAppliedConstraintsSignature,
       showSuccess,
       showError,
       showInfo
@@ -135,9 +204,9 @@ export function ShiftManager() {
   };
 
   const assignments =
-    recoilState.assignments ||
-    (recoilState.posts || []).map(() =>
-      (recoilState.hours || defaultHours).map(() => null)
+    activeRoster.assignments ||
+    (activeRoster.posts || []).map(() =>
+      (activeRoster.hours || defaultHours).map(() => null)
     );
 
   const syncStatus = recoilState.syncStatus;
@@ -161,11 +230,11 @@ export function ShiftManager() {
         <img
           src={tumbleweedIcon}
           alt="Tumbleweed Icon"
-          className="w-16 h-full"
+          className="w-16 h-full dark-invert"
         />
         <div className="flex flex-col">
           <h1 className="text-2xl font-bold">{t("tumbleweed")}</h1>
-          <h2 className="text-md text-gray-400">{t("shiftManager")}</h2>
+          <h2 className="text-md text-muted-foreground">{t("shiftManager")}</h2>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative" ref={userMenuRef}>
@@ -177,12 +246,12 @@ export function ShiftManager() {
                 <img
                   src={user.picture}
                   alt={user.name}
-                  className="w-8 h-8 rounded-full"
+                  className="w-10 h-10 rounded-full border border-gray-700 dark:border-gray-300"
                   referrerPolicy="no-referrer"
                 />
               ) : (
-                <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
-                  <IconUser size={18} className="text-gray-500" />
+                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                  <IconUser size={18} className="text-muted-foreground" />
                 </div>
               )}
             </button>
@@ -190,34 +259,33 @@ export function ShiftManager() {
                 <span className="absolute top-0 right-0 w-3.5 h-3.5 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center pointer-events-none z-10">!</span>
               )}
             {showUserMenu && (
-              <div dir="auto" className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border p-3 z-50">
+              <div className="absolute end-0 mt-2 w-48 bg-popover text-popover-foreground rounded-lg shadow-lg border p-3 z-50 text-start">
                 {isAuthenticated && (
                   <>
                     <div className="text-sm font-medium">{user?.name}</div>
-                    <div className="text-xs text-gray-400 truncate">{user?.email}</div>
+                    <div className="text-xs text-muted-foreground truncate">{user?.email}</div>
                     <hr className="my-2" />
                   </>
                 )}
-                <div className="mb-1">
+                <div className="flex items-center gap-2 mb-1">
                   <LanguageSwitcher />
+                  <ThemeSwitcher />
                 </div>
-                {isAuthenticated && (
-                  <button
-                    onClick={() => { setShowUserMenu(false); setIsSettingsOpen(true); }}
-                    className="flex items-center gap-2 text-sm text-gray-700 hover:text-black w-full text-start"
-                  >
-                    <IconSettings size={16} />
-                    {t("Settings")}
-                    {shareDebugInfo && (
-                      <span className="w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">!</span>
-                    )}
-                  </button>
-                )}
+                <button
+                  onClick={() => { setShowUserMenu(false); setIsSettingsOpen(true); }}
+                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground w-full text-start"
+                >
+                  <IconSettings size={16} />
+                  {t("Settings")}
+                  {shareDebugInfo && (
+                    <span className="w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">!</span>
+                  )}
+                </button>
                 <a
                   href="https://github.com/gilador/Tumbleweed"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-sm text-gray-700 hover:text-black w-full text-start mt-1"
+                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground w-full text-start mt-1"
                 >
                   <IconBrandGithub size={16} />
                   {t("sourceCode")}
@@ -240,7 +308,7 @@ export function ShiftManager() {
                     {t("signInWithGoogle")}
                   </button>
                 )}
-                <div className="text-[10px] text-gray-300 text-center mt-2 select-none">v{APP_VERSION}</div>
+                <div className="text-[10px] text-muted-foreground/50 text-center mt-2 select-none">v{APP_VERSION}</div>
               </div>
             )}
           </div>
@@ -251,18 +319,17 @@ export function ShiftManager() {
           <div className="flex flex-col p-2">
             <VerticalActionGroup className="flex-none gap-3">
               <SyncStatusIcon status={syncStatus} size={18} />
-              {assignments.some((post) => post.some((u) => u !== null)) && (
-                <ShareButton
-                  posts={recoilState.posts || []}
-                  hours={recoilState.hours || defaultHours}
-                  assignments={assignments}
-                  userShiftData={recoilState.userShiftData || []}
-                  endTime={recoilState.endTime || "18:00"}
-                  customCellDisplayNames={recoilState.customCellDisplayNames || {}}
-                  groupBy="time"
-                  onCopied={() => showInfo(t("copiedToClipboard"))}
-                />
-              )}
+              <ShareButton
+                posts={activeRoster.posts || []}
+                hours={activeRoster.hours || defaultHours}
+                assignments={assignments}
+                userShiftData={recoilState.userShiftData || []}
+                endTime={activeRoster.endTime || "18:00"}
+                customCellDisplayNames={activeRoster.customCellDisplayNames || {}}
+                groupBy="time"
+                onCopied={() => showInfo(t("copiedToClipboard"))}
+                disabled={!assignments.some((post) => post.some((u) => u !== null))}
+              />
               <EditButton
                 isEditing={isEditing}
                 onToggle={() => {
@@ -296,36 +363,24 @@ export function ShiftManager() {
             >
               <div className="flex items-center gap-2 mb-2 flex-none">
                 <h3 className="text-lg font-semibold">{t("shiftAssignments")}</h3>
-                <div className="flex items-center gap-3 text-sm bg-gray-100 px-3 py-1 rounded-md whitespace-nowrap">
+                <RosterSwitcher />
+                <div className="flex items-center gap-3 text-sm bg-muted px-3 py-1 rounded-md whitespace-nowrap">
                   <span className="font-medium">
-                    {t("postsCount", { count: recoilState.posts?.length || 0 })}
+                    {activeRoster.scheduleMode === "7d" ? t("weeklyRoster") : t("singleDay")}
                   </span>
-                  <span className="text-gray-400">|</span>
+                  <span className="text-muted-foreground">|</span>
                   <span className="font-medium">
-                    {(() => {
-                      const totalHours = (recoilState.hours || defaultHours).length;
-                      const perDay = recoilState.scheduleMode === "7d" ? Math.round(totalHours / 7) : totalHours;
-                      return recoilState.scheduleMode === "7d"
-                        ? t("shiftsPerDay", { count: perDay })
-                        : t("shiftsCount", { count: perDay });
-                    })()}
+                    {t("postsCount", { count: activeRoster.posts?.length || 0 })}
                   </span>
-                  <span className="text-gray-400">|</span>
+                  <span className="text-muted-foreground">|</span>
                   <span className="font-medium">
-                    {(() => {
-                      const shiftDuration = getOptimalShiftDuration(
-                        recoilState.startTime || "08:00",
-                        recoilState.endTime || "16:00",
-                        recoilState.posts?.length || 0,
-                        recoilState.userShiftData?.length || 0,
-                        recoilState.restTime || 2
-                      );
-                      return t("shiftDurationLabel", { duration: shiftDuration.toFixed(1) });
-                    })()}
+                    {activeRoster.scheduleMode === "7d"
+                      ? t("shiftsPerDay", { count: scheduleInfo.shiftsCount })
+                      : t("shiftsCount", { count: scheduleInfo.shiftsCount })}
                   </span>
-                  <span className="text-gray-400">|</span>
+                  <span className="text-muted-foreground">|</span>
                   <span className="font-medium">
-                    {recoilState.scheduleMode === "7d" ? t("weeklyRoster") : t("singleDay")}
+                    {t("shiftDurationLabel", { duration: (isNaN(scheduleInfo.shiftDuration) ? 0 : scheduleInfo.shiftDuration).toFixed(1) })}
                   </span>
                 </div>
                 <PostListActions
@@ -335,13 +390,24 @@ export function ShiftManager() {
                   checkedPostIds={checkedPostIds}
                   onCheckAll={handlePostCheckAll}
                 />
+                <ActionHint
+                  posts={activeRoster.posts?.length || 0}
+                  staff={recoilState.userShiftData?.length || 0}
+                  restTime={recoilState.restTime || 2}
+                  startTime={activeRoster.startTime || "08:00"}
+                  endTime={activeRoster.endTime || "18:00"}
+                  hasAssignments={assignments.some((post) => post.some((u) => u !== null))}
+                  isOptimized={!!recoilState.optimizationSignature}
+                  shiftsCount={scheduleInfo.shiftsCount}
+                  shiftDuration={scheduleInfo.shiftDuration}
+                />
               </div>
               <div className="flex-1 border-primary-rounded-lg overflow-hidden relative">
                 {/* Clear assignments button */}
                 {assignments.some((post) => post.some((u) => u !== null)) && (
                   <button
                     onClick={() => setIsClearDialogOpen(true)}
-                    className="absolute top-1 end-1 z-20 px-2.5 py-1 rounded-full text-xs text-white bg-gray-900 hover:bg-gray-700 transition-colors"
+                    className="absolute top-1 end-1 z-20 px-2.5 py-1 rounded-full text-xs text-white bg-gray-900 hover:bg-gray-700 border border-white/30 transition-colors"
                   >
                     {t("clearAssignments")}
                   </button>
@@ -354,13 +420,13 @@ export function ShiftManager() {
                         ?.map((u) => u.user.name)
                         .join("-") || "no-users"
                     }-${
-                      recoilState.posts?.map((p) => p.id).join("-") ||
+                      activeRoster.posts?.map((p) => p.id).join("-") ||
                       "no-posts"
                     }`}
                     className="h-full"
-                    posts={recoilState.posts}
-                    hours={recoilState.hours || defaultHours}
-                    endTime={recoilState.endTime}
+                    posts={activeRoster.posts}
+                    hours={activeRoster.hours || defaultHours}
+                    endTime={activeRoster.endTime}
                     users={
                       recoilState.userShiftData?.map(
                         (userData) => userData.user
@@ -369,7 +435,7 @@ export function ShiftManager() {
                     userShiftData={recoilState.userShiftData || []}
                     mode="assignments"
                     assignments={assignments}
-                    customCellDisplayNames={recoilState.customCellDisplayNames}
+                    customCellDisplayNames={activeRoster.customCellDisplayNames}
                     selectedUserId={selectedUserId}
                     onConstraintsChange={() => {
                       // Assignment changes handled by table component directly
@@ -411,18 +477,28 @@ export function ShiftManager() {
                       : "invisible opacity-0 pointer-events-none"
                   }`}
                   onClick={() => handleCloseShiftSettings()}
-                  style={{ paddingTop: "2rem" }}
+                  style={{ paddingTop: "0.5rem" }}
                 >
                   <div
-                    className="w-[40rem] max-w-[calc(100%-4rem)]"
+                    className="w-[40rem] max-w-[calc(100%-4rem)] max-h-[calc(100%-1rem)] overflow-hidden rounded-lg border-2 border-foreground bg-background/90 backdrop-blur-md shadow-xl"
                     onClick={(e) => e.stopPropagation()}
                   >
+                    <div className="flex justify-between items-center px-2 pt-1 pb-1 sticky top-0 bg-background/90 backdrop-blur-md z-10">
+                      <h4 className="text-base font-semibold text-start">{t("shiftAdjustment")}</h4>
+                      <button
+                        onClick={handleCloseShiftSettings}
+                        aria-label={t("closeShiftAdjustment")}
+                        title={t("closeShiftAdjustment")}
+                        className="p-1 rounded-md hover:bg-accent transition-colors"
+                      >
+                        <IconX size={16} />
+                      </button>
+                    </div>
                     <ShiftInfoSettingsView
                       restTime={recoilState.restTime ?? 2}
-                      startHour={recoilState.startTime ?? "08:00"}
-                      endHour={recoilState.endTime ?? "16:00"}
-                      posts={recoilState.posts || []}
-                      onClose={handleCloseShiftSettings}
+                      startHour={activeRoster.startTime ?? "08:00"}
+                      endHour={activeRoster.endTime ?? "16:00"}
+                      posts={activeRoster.posts || []}
                     />
                   </div>
                 </div>
@@ -510,27 +586,25 @@ export function ShiftManager() {
             >
               <div className="flex items-center gap-2 flex-none mb-2">
                 <h3 className="text-lg font-semibold">{t("staff")}</h3>
-                <div className="flex items-center gap-3 text-sm bg-gray-100 px-3 py-1 rounded-md">
+                <div className="flex items-center gap-3 text-sm bg-muted px-3 py-1 rounded-md">
                   <span className="font-medium">
                     {t("staffCount", { count: recoilState.userShiftData?.length || 0 })}
                   </span>
-                  <span className="text-gray-400">|</span>
-                  <span className="flex items-center gap-1.5 font-medium">
-                    <span className="min-w-[1.5rem] text-center text-xs font-semibold rounded-full px-1 py-0.5 bg-black text-white">
-                      {(() => {
-                        const staffCount = recoilState.userShiftData?.length || 0;
-                        if (staffCount === 0) return "0";
-                        let totalAssignments = 0;
-                        for (const postAssignments of assignments) {
-                          for (const assignedUserId of postAssignments) {
-                            if (assignedUserId !== null) {
-                              totalAssignments++;
-                            }
+                  <span className="text-muted-foreground">|</span>
+                  <span className="font-medium">
+                    {(() => {
+                      const staffCount = recoilState.userShiftData?.length || 0;
+                      if (staffCount === 0) return "0";
+                      let totalAssignments = 0;
+                      for (const postAssignments of assignments) {
+                        for (const assignedUserId of postAssignments) {
+                          if (assignedUserId !== null) {
+                            totalAssignments++;
                           }
                         }
-                        return Math.round(totalAssignments / staffCount);
-                      })()}
-                    </span>
+                      }
+                      return Math.round(totalAssignments / staffCount);
+                    })()}{" "}
                     {t("avgShiftsLabel")}
                   </span>
                 </div>
@@ -570,9 +644,19 @@ export function ShiftManager() {
                       onUpdateUserName={updateUserName}
                       isEditing={isEditing}
                       checkedUserIds={checkedUserIds}
-                      onCheckUser={(userId) =>
-                        setCheckedUserIds([...checkedUserIds, userId])
-                      }
+                      onCheckUser={(userId, event) => {
+                        const allUserIds = (recoilState.userShiftData || []).map((u) => u.user.id);
+                        const currentIndex = allUserIds.indexOf(userId);
+                        if (event?.shiftKey && lastCheckedUserRef.current !== null) {
+                          const start = Math.min(lastCheckedUserRef.current, currentIndex);
+                          const end = Math.max(lastCheckedUserRef.current, currentIndex);
+                          const rangeIds = allUserIds.slice(start, end + 1);
+                          setCheckedUserIds((prev) => Array.from(new Set([...prev, ...rangeIds])));
+                        } else {
+                          setCheckedUserIds((prev) => [...prev, userId]);
+                        }
+                        lastCheckedUserRef.current = currentIndex;
+                      }}
                       onUncheckUser={(userId) =>
                         setCheckedUserIds(
                           checkedUserIds.filter((id) => id !== userId)
@@ -595,10 +679,10 @@ export function ShiftManager() {
                             )?.user
                           : undefined
                       }
-                      availabilityConstraints={selectedUser?.constraints}
-                      posts={recoilState.posts}
-                      hours={recoilState.hours || defaultHours}
-                      endTime={recoilState.endTime}
+                      availabilityConstraints={selectedUser?.constraintsByRoster?.[recoilState.activeRosterId] || selectedUser?.constraints}
+                      posts={activeRoster.posts}
+                      hours={activeRoster.hours || defaultHours}
+                      endTime={activeRoster.endTime}
                       userShiftData={recoilState.userShiftData || []}
                       mode="availability"
                       onConstraintsChange={(newConstraints) => {

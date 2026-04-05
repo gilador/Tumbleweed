@@ -1,14 +1,77 @@
-import { atom, AtomEffect, DefaultValue } from "recoil";
+import { atom, selector, AtomEffect, DefaultValue } from "recoil";
 import { UniqueString } from "../models/index";
-import { UserShiftData } from "../models";
+import { UserShiftData, RosterState, createEmptyRoster, getActiveRoster } from "../models";
 import { SyncStatus } from "../components/SyncStatusIcon";
 import {
   saveStateToLocalStorage,
   LOCAL_STORAGE_KEY,
+  LAST_LOCAL_SAVE_KEY,
+  computeChecksum,
 } from "../lib/localStorageUtils";
 
 // Data structure for persistence, excluding syncStatus
 export interface PersistedShiftData {
+  // Multi-roster structure
+  rosters: RosterState[];
+  activeRosterId: string;
+  userShiftData: UserShiftData[];
+  hasInitialized: boolean;
+  restTime: number;
+  zeroRest?: boolean;
+  // Snapshot of inputs used for the last successful optimization.
+  // If current inputs match this, the schedule is considered optimized.
+  optimizationSignature?: string | null;
+}
+
+// Full state including syncStatus
+export interface ShiftState extends PersistedShiftData {
+  syncStatus: SyncStatus;
+}
+
+// --- Backward-compatible accessors ---
+export function getActiveRosterFromState(state: ShiftState): RosterState {
+  return getActiveRoster(state.rosters, state.activeRosterId);
+}
+
+export function updateActiveRoster(
+  state: ShiftState,
+  updater: (roster: RosterState) => RosterState
+): ShiftState {
+  return {
+    ...state,
+    rosters: state.rosters.map((r) =>
+      r.id === state.activeRosterId ? updater(r) : r
+    ),
+  };
+}
+
+export function updateRosterById(
+  state: ShiftState,
+  rosterId: string,
+  updater: (roster: RosterState) => RosterState
+): ShiftState {
+  return {
+    ...state,
+    rosters: state.rosters.map((r) =>
+      r.id === rosterId ? updater(r) : r
+    ),
+  };
+}
+
+const defaultRoster = createEmptyRoster("", "default-roster");
+
+export const initialLoadState: ShiftState = {
+  rosters: [defaultRoster],
+  activeRosterId: defaultRoster.id,
+  userShiftData: [],
+  hasInitialized: false,
+  syncStatus: "idle",
+  restTime: 2,
+  optimizationSignature: null,
+};
+
+// --- Legacy format detection and migration ---
+interface LegacyPersistedShiftData {
   posts: UniqueString[];
   hours: UniqueString[];
   userShiftData: UserShiftData[];
@@ -21,11 +84,9 @@ export interface PersistedShiftData {
     };
   };
   customCellDisplayNames: { [slotKey: string]: string };
-  // Shift settings
   startTime: string;
   endTime: string;
   restTime: number;
-  // Schedule mode
   scheduleMode: "24h" | "7d";
   startDate: string | null;
   cachedWeeklyState: {
@@ -36,62 +97,55 @@ export interface PersistedShiftData {
   } | null;
 }
 
-// Full state including syncStatus
-export interface ShiftState extends PersistedShiftData {
-  syncStatus: SyncStatus;
+export function isLegacyFormat(data: any): data is LegacyPersistedShiftData {
+  return data && "posts" in data && !("rosters" in data);
 }
 
-// This is the true initial state before any localStorage interaction from component
-export const initialLoadState: ShiftState = {
-  posts: [],
-  hours: [],
-  userShiftData: [],
-  hasInitialized: false,
-  syncStatus: "idle", // New status: idle, until component loads from storage
-  assignments: [],
-  manuallyEditedSlots: {}, // Initialize as empty object
-  customCellDisplayNames: {}, // Initialize as empty object
-  // Default shift settings
-  startTime: "08:00",
-  endTime: "18:00",
-  restTime: 2,
-  // Schedule mode
-  scheduleMode: "24h",
-  startDate: null,
-  cachedWeeklyState: null,
-};
+export function migrateLegacyState(legacy: LegacyPersistedShiftData): PersistedShiftData {
+  const rosterId = "migrated-roster-1";
+  const roster: RosterState = {
+    id: rosterId,
+    name: "",
+    posts: legacy.posts || [],
+    hours: legacy.hours || [],
+    assignments: legacy.assignments || [],
+    manuallyEditedSlots: legacy.manuallyEditedSlots || {},
+    customCellDisplayNames: legacy.customCellDisplayNames || {},
+    scheduleMode: legacy.scheduleMode || "24h",
+    startTime: legacy.startTime || "08:00",
+    endTime: legacy.endTime || "18:00",
+    startDate: legacy.startDate || null,
+    cachedWeeklyState: legacy.cachedWeeklyState || null,
+  };
+
+  const migratedUsers: UserShiftData[] = (legacy.userShiftData || []).map((u) => ({
+    ...u,
+    constraintsByRoster: { [rosterId]: u.constraints },
+  }));
+
+  return {
+    rosters: [roster],
+    activeRosterId: rosterId,
+    userShiftData: migratedUsers,
+    hasInitialized: legacy.hasInitialized,
+    restTime: legacy.restTime ?? 2,
+  };
+}
 
 // Define the persistence effect
 const persistenceEffect: AtomEffect<ShiftState> = ({
   setSelf,
   onSet,
-  // trigger,
 }) => {
-  // trigger === 'get' is no longer responsible for async loading here.
-  // The atom will initialize with its `default` value synchronously.
-  // A component (e.g., App or ShiftManager) will handle async loading in useEffect.
-
   onSet(async (newValue, oldValue) => {
-    console.log("[persistenceEffect] onSet triggered."); // Log trigger
+    console.log("[persistenceEffect] onSet triggered.");
     if (newValue instanceof DefaultValue) {
       console.log("[persistenceEffect] Atom was reset.");
-      // Atom was reset. Save the initialLoadState (or clear storage).
       try {
         const { syncStatus, ...persistableDefault } = initialLoadState;
-        console.log(
-          "[shiftStore] onSet (DefaultValue): Attempting to save initialLoadState to localStorage."
-        );
         await saveStateToLocalStorage(LOCAL_STORAGE_KEY, persistableDefault);
-        console.log(
-          "[shiftStore] onSet (DefaultValue): Successfully saved initialLoadState."
-        );
-        // setSelf({...initialLoadState, syncStatus: 'synced'}); // or 'idle' after reset
       } catch (error) {
-        console.error(
-          "[shiftStore] onSet (DefaultValue): Error saving default state on reset:",
-          error
-        );
-        // Consider how to set syncStatus if reset save fails
+        console.error("[shiftStore] onSet (DefaultValue): Error saving:", error);
       }
       return;
     }
@@ -99,172 +153,151 @@ const persistenceEffect: AtomEffect<ShiftState> = ({
     const oldConcreteValue =
       oldValue instanceof DefaultValue ? initialLoadState : oldValue;
 
-    const { syncStatus: newSS, ...newPersistedData } = newValue;
-    const { syncStatus: oldSS, ...oldPersistedData } = oldConcreteValue;
+    const { syncStatus: _newSS, ...newPersistedData } = newValue;
+    const { syncStatus: _oldSS, ...oldPersistedData } = oldConcreteValue;
 
-    // If userShiftData is empty and the state has been initialized,
-    // it implies a reset of user-specific data, so clear related slot edits and names.
+    // If userShiftData is empty and initialized, clear per-roster slot edits
     if (
       newPersistedData.hasInitialized &&
-      newPersistedData.userShiftData && // Ensure userShiftData exists on the object
-      newPersistedData.userShiftData.length === 0
+      newPersistedData.userShiftData?.length === 0
     ) {
-      if (Object.keys(newPersistedData.manuallyEditedSlots).length > 0) {
-        newPersistedData.manuallyEditedSlots = {};
-        console.log(
-          "[persistenceEffect] Cleared manuallyEditedSlots as userShiftData is empty and state initialized."
-        );
-      }
-      if (Object.keys(newPersistedData.customCellDisplayNames).length > 0) {
-        newPersistedData.customCellDisplayNames = {};
-        console.log(
-          "[persistenceEffect] Cleared customCellDisplayNames as userShiftData is empty and state initialized."
-        );
+      for (const roster of newPersistedData.rosters) {
+        if (Object.keys(roster.manuallyEditedSlots).length > 0) {
+          roster.manuallyEditedSlots = {};
+        }
+        if (Object.keys(roster.customCellDisplayNames).length > 0) {
+          roster.customCellDisplayNames = {};
+        }
       }
     }
 
-    // Log addition or removal of posts (columns in the assignments array)
-    const oldAssignmentsData = oldPersistedData.assignments || [];
-    const newAssignmentsData = newPersistedData.assignments || [];
-
-    const oldNumPosts =
-      oldAssignmentsData.length > 0 && oldAssignmentsData[0]
-        ? oldAssignmentsData[0].length
-        : 0;
-    const newNumPosts =
-      newAssignmentsData.length > 0 && newAssignmentsData[0]
-        ? newAssignmentsData[0].length
-        : 0;
-
-    if (newNumPosts !== oldNumPosts) {
-      if (newNumPosts > oldNumPosts) {
-        console.log(
-          `DELETE: Post(s) ADDED. Old column count: ${oldNumPosts}, New column count: ${newNumPosts}. Reflected assignments state:`,
-          JSON.stringify(newAssignmentsData)
-        );
-      } else {
-        // newNumPosts < oldNumPosts
-        console.log(
-          `DELETE: Post(s) REMOVED. Old column count: ${oldNumPosts}, New column count: ${newNumPosts}. Reflected assignments state:`,
-          JSON.stringify(newAssignmentsData)
-        );
-      }
-    }
-
-    // Log the data being compared
-    console.log(
-      "[persistenceEffect] Old assignments:",
-      oldPersistedData.assignments
-    );
-    console.log(
-      "[persistenceEffect] New assignments:",
-      newPersistedData.assignments
-    );
-
-    const persistableDataChanged =
-      JSON.stringify(newPersistedData) !== JSON.stringify(oldPersistedData);
-    console.log(
-      "[persistenceEffect] Persistable data changed?",
-      persistableDataChanged
-    );
+    const newSerialized = JSON.stringify(newPersistedData);
+    const oldSerialized = JSON.stringify(oldPersistedData);
+    const persistableDataChanged = newSerialized !== oldSerialized;
 
     if (persistableDataChanged) {
       console.log("[persistenceEffect] Data changed, proceeding with save.");
-      const startTime = Date.now(); // Record start time
+      const startTime = Date.now();
 
-      // Set to syncing AND update to the new data immediately
       setSelf({
-        ...newPersistedData, // Commit the new data part of the state
-        syncStatus: "syncing" as SyncStatus, // Set status to syncing
+        ...newPersistedData,
+        syncStatus: "syncing" as SyncStatus,
       });
-      // At this point, the Recoil state reflects newPersistedData and is "syncing"
-      console.log(
-        '[shiftStore] onSet: State updated immediately with new data and status "syncing". Start time:',
-        startTime,
-        "Persisted data committed:",
-        newPersistedData
-      );
 
       try {
-        console.log(
-          "[persistenceEffect] Attempting to save to localStorage. Data:",
-          newPersistedData
-        );
         await saveStateToLocalStorage(LOCAL_STORAGE_KEY, newPersistedData);
+
+        // Only update local save timestamp if content actually changed (by checksum)
+        const newChecksum = await computeChecksum(newPersistedData);
+        const lastChecksum = localStorage.getItem("tumbleweed-local-checksum");
+        if (newChecksum !== lastChecksum) {
+          localStorage.setItem("tumbleweed-local-checksum", newChecksum);
+          localStorage.setItem(LAST_LOCAL_SAVE_KEY, new Date().toISOString());
+        }
+
         console.log("[persistenceEffect] Successfully saved to localStorage.");
 
-        const endTime = Date.now();
-        const elapsedTime = endTime - startTime;
-        const delayNeeded = Math.max(0, 1000 - elapsedTime);
-
-        console.log(
-          `[persistenceEffect] Save successful. Elapsed: ${elapsedTime}ms, Delay needed: ${delayNeeded}ms`
-        );
-
+        const delayNeeded = Math.max(0, 1000 - (Date.now() - startTime));
         setTimeout(() => {
-          // After the delay, update ONLY the syncStatus.
-          // The rest of the state already reflects newPersistedData from the earlier setSelf.
           setSelf((currentState) => {
-            const base =
-              currentState instanceof DefaultValue
-                ? initialLoadState
-                : currentState;
-            console.log(
-              '[shiftStore] onSet (after delay, success): Updating syncStatus to "synced". State before this update was:',
-              base
-            );
-            return {
-              ...base, // Spread the current state (which has the correct data and was syncing)
-              syncStatus: "synced" as SyncStatus,
-            };
+            const base = currentState instanceof DefaultValue ? initialLoadState : currentState;
+            return { ...base, syncStatus: "synced" as SyncStatus };
           });
         }, delayNeeded);
       } catch (error) {
-        console.error(
-          "[shiftStore] onSet: Error saving state to localStorage:",
-          error
-        );
-
-        const endTime = Date.now();
-        const elapsedTime = endTime - startTime;
-        const delayNeeded = Math.max(0, 1000 - elapsedTime);
-
-        console.log(
-          `[persistenceEffect] Save failed. Elapsed: ${elapsedTime}ms, Delay needed: ${delayNeeded}ms`
-        );
-
+        console.error("[shiftStore] onSet: Error saving:", error);
+        const delayNeeded = Math.max(0, 1000 - (Date.now() - startTime));
         setTimeout(() => {
-          // After the delay, update ONLY the syncStatus.
-          // The rest of the state already reflects newPersistedData.
           setSelf((currentState) => {
-            const base =
-              currentState instanceof DefaultValue
-                ? initialLoadState
-                : currentState;
-            console.log(
-              '[shiftStore] onSet (after delay, error): Updating syncStatus to "out-of-sync". State before this update was:',
-              base
-            );
-            return {
-              ...base, // Spread the current state (which has the correct data and was syncing)
-              syncStatus: "out-of-sync" as SyncStatus,
-            };
+            const base = currentState instanceof DefaultValue ? initialLoadState : currentState;
+            return { ...base, syncStatus: "out-of-sync" as SyncStatus };
           });
         }, delayNeeded);
       }
-    } else {
-      console.log(
-        "[persistenceEffect] Data has not changed (persistable part), or syncStatus change is internal. No save needed now. New syncStatus:",
-        newValue instanceof DefaultValue ? "Default" : newValue.syncStatus,
-        "Old syncStatus:",
-        oldValue instanceof DefaultValue ? "Default" : oldValue.syncStatus
-      );
     }
   });
 };
 
 export const shiftState = atom<ShiftState>({
   key: "shiftState",
-  default: initialLoadState, // Initialize synchronously
+  default: initialLoadState,
   effects: [persistenceEffect],
+});
+
+export interface ShiftScheduleInfo {
+  shiftDuration: number;
+  shiftsCount: number;
+  shiftStartTimes: string[];
+}
+
+/**
+ * Derived selector: computes shift duration, count, and start times
+ * from the active roster's parameters. Single source of truth for
+ * both toolbar and config dialog.
+ */
+export const shiftScheduleInfoSelector = selector<ShiftScheduleInfo>({
+  key: "shiftScheduleInfo",
+  get: ({ get }) => {
+    const state = get(shiftState);
+    const roster = getActiveRoster(state.rosters, state.activeRosterId);
+
+    // Read directly from the roster — this is the actual data the grid uses.
+    const hours = roster.hours || [];
+    const startTimes = hours.map((h) => h.value);
+
+    // Extract raw time from hour value (handles weekly "day·HH:MM" format)
+    const parseTime = (val: string): [number, number] => {
+      // Weekly format: "0·08:00" → extract "08:00"
+      const timeStr = val.includes("·") ? val.split("·")[1] : val;
+      const [h, m] = timeStr.split(":").map(Number);
+      return [h || 0, m || 0];
+    };
+
+    const shiftsCount = roster.scheduleMode === "7d"
+      ? Math.round(hours.length / 7)
+      : hours.length;
+
+    // Derive duration from the actual hours in the roster
+    let shiftDuration = 0;
+    if (roster.scheduleMode === "7d" && hours.length >= 2) {
+      // For weekly mode, find consecutive hours on the same day
+      const day0Hours = hours.filter((h) => h.value.startsWith("0·"));
+      if (day0Hours.length >= 2) {
+        const [h1, m1] = parseTime(day0Hours[0].value);
+        const [h2, m2] = parseTime(day0Hours[1].value);
+        let diffMin = (h2 * 60 + m2) - (h1 * 60 + m1);
+        if (diffMin <= 0) diffMin += 24 * 60;
+        shiftDuration = diffMin / 60;
+      } else if (day0Hours.length === 1) {
+        // Single shift per day
+        const startTime = roster.startTime || "08:00";
+        const endTime = roster.endTime || "18:00";
+        const [sh, sm] = startTime.split(":").map(Number);
+        const [eh, em] = endTime.split(":").map(Number);
+        let diffMin = (eh * 60 + em) - (sh * 60 + sm);
+        if (diffMin <= 0) diffMin += 24 * 60;
+        shiftDuration = diffMin / 60;
+      }
+    } else if (hours.length >= 2) {
+      const [h1, m1] = parseTime(hours[0].value);
+      const [h2, m2] = parseTime(hours[1].value);
+      let diffMin = (h2 * 60 + m2) - (h1 * 60 + m1);
+      if (diffMin <= 0) diffMin += 24 * 60;
+      shiftDuration = diffMin / 60;
+    } else if (hours.length === 1) {
+      const startTime = roster.startTime || "08:00";
+      const endTime = roster.endTime || "18:00";
+      const [sh, sm] = startTime.split(":").map(Number);
+      const [eh, em] = endTime.split(":").map(Number);
+      let diffMin = (eh * 60 + em) - (sh * 60 + sm);
+      if (diffMin <= 0) diffMin += 24 * 60;
+      shiftDuration = diffMin / 60;
+    }
+
+    return {
+      shiftDuration,
+      shiftsCount,
+      shiftStartTimes: startTimes,
+    };
+  },
 });

@@ -88,6 +88,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const tokenClientRef = useRef<google.accounts.oauth2.TokenClient | null>(null);
   const gisReadyRef = useRef(false);
 
+  // Listen for token changes from other tabs (popup/redirect login)
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === ACCESS_TOKEN_KEY && e.newValue) {
+        // Token was set in another tab — refresh user profile
+        fetchUserProfile(e.newValue)
+          .then((profile) => {
+            localStorage.setItem(USER_PROFILE_KEY, JSON.stringify(profile));
+            setUser(profile);
+          })
+          .catch(() => {});
+      }
+      if (e.key === ACCESS_TOKEN_KEY && !e.newValue) {
+        // Token was removed
+        setUser(null);
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
+
+  // Also listen for same-tab token changes via custom event
+  useEffect(() => {
+    const handleTokenRenewed = () => {
+      const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+      if (token && !user) {
+        fetchUserProfile(token)
+          .then((profile) => {
+            localStorage.setItem(USER_PROFILE_KEY, JSON.stringify(profile));
+            setUser(profile);
+          })
+          .catch(() => {});
+      }
+    };
+    window.addEventListener("storage-token-renewed", handleTokenRenewed);
+    return () => window.removeEventListener("storage-token-renewed", handleTokenRenewed);
+  }, [user]);
+
   // Initialize GIS on mount
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID) return;

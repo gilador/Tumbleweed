@@ -40,7 +40,7 @@ export function ReassignSheet({
         </div>
 
         {/* Header */}
-        <div className="px-4 pb-3 border-b border-black flex-none">
+        <div className="px-4 pb-3 border-b border-border flex-none">
           <h3 className="text-sm font-semibold">{postName}</h3>
           <p className="text-xs text-muted-foreground" dir="ltr">{timeRange}</p>
         </div>
@@ -83,10 +83,10 @@ export function ReassignSheet({
         </div>
 
         {/* Unassign action */}
-        <div className="px-4 py-3 border-t border-black flex-none">
+        <div className="px-4 py-3 border-t border-border flex-none">
           <button
             onClick={() => onAssign(null)}
-            className="flex items-center justify-center gap-2 w-full min-h-[44px] rounded-md border border-black text-sm hover:bg-accent"
+            className="flex items-center justify-center gap-2 w-full min-h-[44px] rounded-md border border-border text-sm hover:bg-accent"
           >
             <IconX size={16} className="text-muted-foreground" />
             {t("unassign")}

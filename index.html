@@ -9,6 +9,14 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="apple-touch-icon" href="/tumbleweed/pwa-192x192.png" />
     <title>Tumbleweed</title>
+    <script>
+      // Apply theme before React renders to prevent flash of wrong theme
+      (function() {
+        var theme = localStorage.getItem('tumbleweed-theme') || 'light';
+        var dark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) document.documentElement.classList.add('dark');
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

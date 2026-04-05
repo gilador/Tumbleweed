@@ -7,8 +7,8 @@ export interface ActionableTextProps {
   isSelected?: boolean;
   isEditing: boolean;
   isChecked: boolean;
-  onCheck: () => void;
-  onUncheck: () => void;
+  onCheck: (event?: React.MouseEvent) => void;
+  onUncheck: (event?: React.MouseEvent) => void;
   onUpdate: (id: string, newValue: string) => void;
   onClick?: () => void;
   className?: string;
@@ -86,17 +86,18 @@ export function ActionableText({
             className="flex-shrink-0 w-4 h-4"
             checked={isChecked}
             disabled={!isEditing}
-            onCheckedChange={(checked) => {
-              if (isEditing) {
-                if (checked) {
-                  onCheck();
-                } else {
-                  onUncheck();
-                }
-              }
+            onCheckedChange={() => {
+              // Handled in onClick to access the mouse event
             }}
             onClick={(e) => {
               e.stopPropagation();
+              if (isEditing) {
+                if (isChecked) {
+                  onUncheck(e);
+                } else {
+                  onCheck(e);
+                }
+              }
             }}
           />
         </div>

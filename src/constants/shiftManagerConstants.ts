@@ -6,8 +6,8 @@ export const OPERATION_END_TIME = "18:00";
 export const MINIMUM_REST_TIME = 4; // hours - minimum rest between shifts
 
 export const defaultPosts: UniqueString[] = [
-  { id: "post-1", value: "עמדה 1" },
   { id: "post-2", value: "עמדה 2" },
+  { id: "post-1", value: "עמדה 1" },
 ];
 
 // Fallback hours for when dynamic calculation is not available
@@ -19,5 +19,4 @@ export const defaultHours: UniqueString[] = [
   { id: "hour-5", value: "12:00" },
 ];
 
-// Default worker count for calculations
-export const DEFAULT_STAFF_COUNT = 10;
+

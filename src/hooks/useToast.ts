@@ -21,7 +21,7 @@ export function useToast() {
   }, []);
 
   const showSuccess = useCallback(
-    (message: string, duration = 3000, highlightText?: string) => {
+    (message: string, duration = 2000, highlightText?: string) => {
       console.log("🍞 [useToast] Adding toast:", {
         message,
         duration,
@@ -33,14 +33,14 @@ export function useToast() {
   );
 
   const showError = useCallback(
-    (message: string, duration = 5000) => {
+    (message: string, duration = 3000) => {
       addToast({ message, type: "error", duration });
     },
     [addToast]
   );
 
   const showInfo = useCallback(
-    (message: string, duration = 3000) => {
+    (message: string, duration = 2000) => {
       addToast({ message, type: "info", duration });
     },
     [addToast]

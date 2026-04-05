@@ -17,7 +17,7 @@ const tabs: { id: TabId; labelKey: string; icon: typeof IconLayoutList }[] = [
 export function MobileTabBar({ activeTab, onTabChange }: MobileTabBarProps) {
   const { t } = useTranslation();
   return (
-    <nav className="flex-none border-t border-black bg-background" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+    <nav className="flex-none border-t border-border bg-background" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
       <div className="flex">
         {tabs.map(({ id, labelKey, icon: Icon }) => {
           const isActive = activeTab === id;

@@ -1,13 +1,23 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useRecoilState } from "recoil";
-import { shiftState } from "../stores/shiftStore";
-import { optimizeShift } from "../service/shiftOptimizedService";
-import { defaultHours } from "../constants/shiftManagerConstants";
+import { shiftState, getActiveRosterFromState, updateRosterById } from "../stores/shiftStore";
+import { optimizeAllRosters, RosterInput } from "../service/shiftOptimizedService";
+import { UserShiftData } from "../models";
+
+function buildSignature(state: { userShiftData: UserShiftData[]; posts: any[]; hours: any[]; startTime: string; endTime: string; restTime: number }): string {
+  return JSON.stringify({
+    userShiftData: state.userShiftData,
+    posts: state.posts,
+    hours: state.hours,
+    startTime: state.startTime,
+    endTime: state.endTime,
+    restTime: state.restTime,
+  });
+}
 
 export function useShiftOptimization(
   isEditing: boolean,
-  lastAppliedConstraintsSignature: React.MutableRefObject<string | null>,
   showSuccess: (
     message: string,
     duration?: number,
@@ -23,51 +33,28 @@ export function useShiftOptimization(
     ""
   );
 
+  const activeRoster = getActiveRosterFromState(recoilState);
+
   // Update optimization button state based on conditions
   useEffect(() => {
     const currentSyncStatus = recoilState.syncStatus;
-    const currentAssignments = recoilState.assignments;
+    const currentAssignments = activeRoster.assignments;
     const currentUserShiftData = recoilState.userShiftData;
+    const savedSignature = recoilState.optimizationSignature;
     let newTitle = t("optimizeShiftAssignments"); // Default title
-
-    // Invalidate optimization cache if config has changed
-    if (lastAppliedConstraintsSignature.current !== null) {
-      const currentSignature = JSON.stringify({
-        userShiftData: currentUserShiftData,
-        posts: recoilState.posts,
-        hours: recoilState.hours,
-        startTime: recoilState.startTime,
-        endTime: recoilState.endTime,
-        restTime: recoilState.restTime,
-      });
-      if (currentSignature !== lastAppliedConstraintsSignature.current) {
-        lastAppliedConstraintsSignature.current = null;
-      }
-    }
 
     // Condition 1: Edit mode is active
     if (isEditing) {
-      console.log("🚫 [useShiftOptimization] Disabled: Edit mode active");
       setIsOptimizeDisabled(true);
       newTitle = t("cannotOptimizeEditMode");
       setOptimizeButtonTitle(newTitle);
       return;
     }
 
-    // Condition 2: Sync status is problematic
-    if (
-      currentSyncStatus === "syncing" ||
-      currentSyncStatus === "out-of-sync"
-    ) {
-      console.log(
-        "🚫 [useShiftOptimization] Disabled: Sync status problematic:",
-        currentSyncStatus
-      );
+    // Condition 2: Sync status is out-of-sync (error state)
+    if (currentSyncStatus === "out-of-sync") {
       setIsOptimizeDisabled(true);
-      newTitle =
-        currentSyncStatus === "syncing"
-          ? t("cannotOptimizeSyncing")
-          : t("cannotOptimizeOutOfSync");
+      newTitle = t("cannotOptimizeOutOfSync");
       setOptimizeButtonTitle(newTitle);
       return;
     }
@@ -77,29 +64,16 @@ export function useShiftOptimization(
       currentAssignments &&
       currentAssignments.flat().some((userId) => userId !== null);
 
-    console.log("🔍 [useShiftOptimization] Assignment check:", {
-      hasAnyActualAssignments,
-      currentAssignments: currentAssignments?.map((arr) => arr.slice(0, 3)), // Show first 3 items
-      flatAssignments: currentAssignments?.flat().slice(0, 10), // Show first 10 items
-    });
-
     if (!hasAnyActualAssignments) {
       if (currentUserShiftData && currentUserShiftData.length > 0) {
-        console.log(
-          "✅ [useShiftOptimization] Enabled: No assignments, but has user data - can generate initial"
-        );
         setIsOptimizeDisabled(false);
         newTitle = t("generateInitialAssignments");
-        
-        // Set sync status to "no-optimised" as default when no assignments exist
+
         setRecoilState((prev) => ({
           ...prev,
           syncStatus: "no-optimised",
         }));
       } else {
-        console.log(
-          "🚫 [useShiftOptimization] Disabled: No assignments and no user data"
-        );
         setIsOptimizeDisabled(true);
         newTitle = t("cannotOptimizeNoUsers");
       }
@@ -107,53 +81,49 @@ export function useShiftOptimization(
       return;
     }
 
-    // Condition 4: Assignments exist. Button disabled if current constraints match those that produced these assignments.
-    if (lastAppliedConstraintsSignature.current === null) {
-      console.warn(
-        "[isOptimizeDisabled] lastAppliedConstraintsSignature.current is null, but assignments exist. Enabling button."
-      );
+    // Condition 4: Assignments exist — check if still optimized
+    if (!savedSignature) {
       setIsOptimizeDisabled(false);
       newTitle = t("optimizeWithNewConstraints");
       setOptimizeButtonTitle(newTitle);
       return;
     }
 
-    const currentConstraintsSignature = JSON.stringify({
+    const currentSignature = buildSignature({
       userShiftData: currentUserShiftData,
-      posts: recoilState.posts,
-      hours: recoilState.hours,
-      startTime: recoilState.startTime,
-      endTime: recoilState.endTime,
+      posts: activeRoster.posts,
+      hours: activeRoster.hours,
+      startTime: activeRoster.startTime,
+      endTime: activeRoster.endTime,
       restTime: recoilState.restTime,
     });
 
-    if (
-      currentConstraintsSignature === lastAppliedConstraintsSignature.current
-    ) {
+    if (currentSignature === savedSignature) {
       setIsOptimizeDisabled(true);
       newTitle = t("alreadyOptimized");
     } else {
       setIsOptimizeDisabled(false);
       newTitle = t("optimizeWithUpdatedConstraints");
-      // Set sync status to "no-optimised" when constraints have changed
       setRecoilState((prev) => ({
         ...prev,
         syncStatus: "no-optimised",
+        optimizationSignature: null,
       }));
     }
     setOptimizeButtonTitle(newTitle);
   }, [
     isEditing,
     recoilState.syncStatus,
-    recoilState.assignments,
+    recoilState.optimizationSignature,
+    activeRoster.assignments,
     recoilState.userShiftData,
-    recoilState.posts,
-    recoilState.hours,
-    recoilState.startTime,
-    recoilState.endTime,
+    activeRoster.posts,
+    activeRoster.hours,
+    activeRoster.startTime,
+    activeRoster.endTime,
     recoilState.restTime,
-    lastAppliedConstraintsSignature,
     t,
+    setRecoilState,
   ]);
 
   const handleOptimize = async () => {
@@ -164,152 +134,116 @@ export function useShiftOptimization(
       return;
     }
 
-    console.log("Starting optimization process...");
-    console.log("Current state:", {
-      posts: recoilState.posts,
-      hours: recoilState.hours,
-      userShiftData: recoilState.userShiftData,
-    });
-
-    console.log("useShiftOptimization: Detailed hours analysis:", {
-      hoursCount: recoilState.hours?.length || 0,
-      hoursValues: recoilState.hours?.map((h) => h.value) || [],
-      postsCount: recoilState.posts?.length || 0,
-      usersCount: recoilState.userShiftData?.length || 0,
-    });
-
     try {
-      // Debug the exact data being sent to optimization
-      console.log(
-        "🔍 [useShiftOptimization] Data being sent to optimization:",
-        {
-          userCount: recoilState.userShiftData?.length || 0,
-          postsCount: recoilState.posts?.length || 0,
-          hoursCount: recoilState.hours?.length || 0,
-          sampleUserConstraints:
-            recoilState.userShiftData?.[0]?.constraints?.length || 0,
-          samplePostConstraints:
-            recoilState.userShiftData?.[0]?.constraints?.[0]?.length || 0,
-          currentHours: recoilState.hours?.map((h) => h.value) || [],
-        }
-      );
-
-      const optimizedResult = await optimizeShift(
-        recoilState.userShiftData || []
-      );
-
-      if (!optimizedResult.isOptim) {
-        // Handle infeasible optimization
-        console.warn(
-          "Optimization failed: Problem is infeasible - some shifts have no available users"
-        );
-        // Clear assignments since no valid solution exists
-        setRecoilState((prev) => ({
-          ...prev,
-          assignments: (recoilState.posts || []).map(() =>
-            (recoilState.hours || defaultHours).map(() => null)
-          ),
-          manuallyEditedSlots: prev.manuallyEditedSlots || {},
-          customCellDisplayNames: prev.customCellDisplayNames || {},
+      // Build inputs for ALL rosters
+      const inputs: RosterInput[] = recoilState.rosters.map((roster) => {
+        // Build per-roster user data using constraintsByRoster
+        const rosterUserData: UserShiftData[] = (recoilState.userShiftData || []).map((u) => ({
+          ...u,
+          constraints: u.constraintsByRoster?.[roster.id] || u.constraints,
         }));
 
-        // Log detailed infeasible positions if available
-        if (optimizedResult.infeasiblePositions) {
-          console.warn(
-            "Problematic time slots:",
-            optimizedResult.infeasiblePositions
-          );
+        return {
+          rosterId: roster.id,
+          userData: rosterUserData,
+          posts: roster.posts,
+          hours: roster.hours,
+        };
+      });
+
+      const { results, allOptimal } = await optimizeAllRosters(inputs);
+
+      if (!allOptimal) {
+        // Check if the active roster failed
+        const activeResult = results.get(recoilState.activeRosterId);
+        if (activeResult && !activeResult.isOptim) {
+          let detailedMessage = t("optimizationInfeasible");
+          if (activeResult.infeasiblePositions?.length) {
+            const problematicSlots = activeResult.infeasiblePositions
+              .map((pos) => pos.description)
+              .join(", ");
+            detailedMessage += `\n\n${t("problematicTimeSlots")}:\n${problematicSlots}`;
+            detailedMessage += `\n\n${t("fixAvailabilityHint")}`;
+          }
+          showError(detailedMessage);
         }
-
-        // Create detailed error message (always use translated strings)
-        let detailedMessage = t("optimizationInfeasible");
-
-        if (
-          optimizedResult.infeasiblePositions &&
-          optimizedResult.infeasiblePositions.length > 0
-        ) {
-          const problematicSlots = optimizedResult.infeasiblePositions
-            .map((pos) => pos.description)
-            .join(", ");
-          detailedMessage += `\n\n${t("problematicTimeSlots")}:\n${problematicSlots}`;
-          detailedMessage += `\n\n${t("fixAvailabilityHint")}`;
-        }
-
-        showError(detailedMessage);
-        return; // Early return for infeasible problems
       }
 
-      // Handle successful optimization
-      console.log("Optimization result dimensions:", {
-        resultPosts: optimizedResult.result.length,
-        resultTimeSlots: optimizedResult.result[0]?.length || 0,
-        recoilPosts: recoilState.posts?.length || 0,
-        recoilHours: recoilState.hours?.length || 0,
+      // Capture the signature BEFORE applying (uses current inputs)
+      const signature = buildSignature({
+        userShiftData: recoilState.userShiftData,
+        posts: activeRoster.posts,
+        hours: activeRoster.hours,
+        startTime: activeRoster.startTime,
+        endTime: activeRoster.endTime,
+        restTime: recoilState.restTime,
       });
 
-      // Use recoilState dimensions for UI consistency
-      let newAssignments: (string | null)[][] = (recoilState.posts || []).map(
-        () => (recoilState.hours || defaultHours).map(() => null)
-      );
+      // Apply results to all rosters
+      setRecoilState((prev) => {
+        let newState = { ...prev };
 
-      optimizedResult.result.forEach((postAssignments, postIndex) => {
-        // Ensure we don't try to access postAssignments out of bounds of newAssignments
-        if (postIndex < newAssignments.length) {
-          postAssignments.forEach((shiftAssignments, shiftIndex) => {
-            if (shiftIndex < newAssignments[postIndex].length) {
-              const assignedUserIndex = shiftAssignments.findIndex(
-                (isAssigned) => isAssigned
-              );
+        for (const [rosterId, result] of results) {
+          if (!result.isOptim) continue;
 
-              if (
-                assignedUserIndex >= 0 &&
-                assignedUserIndex < (recoilState.userShiftData?.length || 0)
-              ) {
-                const userId =
-                  recoilState.userShiftData?.[assignedUserIndex]?.user.id ||
-                  null;
-                newAssignments[postIndex][shiftIndex] = userId;
-              } else {
-                newAssignments[postIndex][shiftIndex] = null;
-              }
+          const roster = newState.rosters.find((r) => r.id === rosterId);
+          if (!roster) continue;
+
+          let newAssignments: (string | null)[][] = roster.posts.map(
+            () => roster.hours.map(() => null)
+          );
+
+          // Build per-roster user data for mapping
+          const rosterUserData = (newState.userShiftData || []).map((u) => ({
+            ...u,
+            constraints: u.constraintsByRoster?.[rosterId] || u.constraints,
+          }));
+
+          result.result.forEach((postAssignments, postIndex) => {
+            if (postIndex < newAssignments.length) {
+              postAssignments.forEach((shiftAssignments, shiftIndex) => {
+                if (shiftIndex < newAssignments[postIndex].length) {
+                  const assignedUserIndex = shiftAssignments.findIndex(
+                    (isAssigned) => isAssigned
+                  );
+                  if (
+                    assignedUserIndex >= 0 &&
+                    assignedUserIndex < rosterUserData.length
+                  ) {
+                    newAssignments[postIndex][shiftIndex] =
+                      rosterUserData[assignedUserIndex]?.user.id || null;
+                  }
+                }
+              });
             }
           });
+
+          newState = updateRosterById(newState, rosterId, (r) => ({
+            ...r,
+            assignments: newAssignments,
+          }));
         }
-      });
 
-      setRecoilState((prev) => ({
-        ...prev,
-        assignments: newAssignments,
-        manuallyEditedSlots: prev.manuallyEditedSlots || {},
-        customCellDisplayNames: prev.customCellDisplayNames || {},
-      }));
-
-      // Capture the signature of constraints that led to THIS successful optimization
-      lastAppliedConstraintsSignature.current = JSON.stringify({
-        userShiftData: recoilState.userShiftData, // Constraints used for this optimization
-        posts: recoilState.posts,
-        hours: recoilState.hours,
-        startTime: recoilState.startTime,
-        endTime: recoilState.endTime,
-        restTime: recoilState.restTime,
+        // Persist optimization signature and mark as synced
+        newState.syncStatus = "synced";
+        newState.optimizationSignature = signature;
+        return newState;
       });
 
       console.log("Optimization successful, new assignments applied.");
 
-      // Show success feedback
-      showSuccess(t("optimizationSuccess"));
+      if (allOptimal) {
+        showSuccess(t("optimizationSuccess"));
+      }
     } catch (error) {
       console.error("Error during optimization:", error);
-      setRecoilState((prev) => ({
-        ...prev,
-        assignments: (recoilState.posts || []).map(() =>
-          (recoilState.hours || defaultHours).map(() => null)
-        ),
-        manuallyEditedSlots: prev.manuallyEditedSlots || {},
-        customCellDisplayNames: prev.customCellDisplayNames || {},
-      }));
+      setRecoilState((prev) =>
+        updateRosterById(prev, prev.activeRosterId, (r) => ({
+          ...r,
+          assignments: r.posts.map(() => r.hours.map(() => null)),
+        }))
+      );
 
-      // Show error feedback
       showError(t("optimizationError"));
     }
   };

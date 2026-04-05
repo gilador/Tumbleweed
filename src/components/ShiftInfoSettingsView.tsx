@@ -1,14 +1,14 @@
 import { useState, useEffect } from "react";
-import { useRecoilState } from "recoil";
+import { useRecoilState, useRecoilValue } from "recoil";
 import { useTranslation } from "react-i18next";
-import { IconX } from "@tabler/icons-react";
+// IconX removed - close button now in parent wrapper
 import { getOptimalShiftDuration } from "../service/shiftHourHelperService";
-import { DEFAULT_STAFF_COUNT } from "../constants/shiftManagerConstants";
 import { UniqueString } from "../models/index";
 import { calculateFeasibleIntensityRange } from "../service/intensityRangeHelper";
-import { shiftState } from "../stores/shiftStore";
+import { shiftState, getActiveRosterFromState, updateActiveRoster, shiftScheduleInfoSelector } from "../stores/shiftStore";
 import { useScheduleMode } from "../hooks/useScheduleMode";
 import { encodeFlatHour } from "../service/weeklyScheduleUtils";
+import { TimeInput } from "./TimeInput";
 
 export interface ShiftInfoSettingsViewProps {
   restTime: number;
@@ -20,7 +20,6 @@ export interface ShiftInfoSettingsViewProps {
   onIntensityChange?: (intensity: number) => void;
   posts?: UniqueString[];
   staffCount?: number;
-  onClose?: () => void;
 }
 
 export function ShiftInfoSettingsView({
@@ -32,33 +31,90 @@ export function ShiftInfoSettingsView({
   onEndTimeChange,
   onIntensityChange,
   posts = [],
-  staffCount = DEFAULT_STAFF_COUNT,
-  onClose,
+  staffCount = 0,
 }: ShiftInfoSettingsViewProps) {
   const { t } = useTranslation();
   const [shiftData, setShiftData] = useRecoilState(shiftState);
+  const activeRoster = getActiveRosterFromState(shiftData);
+  const scheduleInfo = useRecoilValue(shiftScheduleInfoSelector);
 
   // ALWAYS use global state values - never fall back to props
-  const localStartTime = shiftData.startTime || startHour;
-  const localEndTime = shiftData.endTime || endHour;
+  const localStartTime = activeRoster.startTime || startHour;
+  const localEndTime = activeRoster.endTime || endHour;
   const intensity = shiftData.restTime ?? restTime;
+  // Override prop with actual staff count from state
+  staffCount = shiftData.userShiftData?.length || staffCount;
 
   // Debug current state values
   console.log("🔍 [ShiftInfoSettingsView] Current state values:", {
     localStartTime,
     localEndTime,
     intensity,
-    "shiftData.startTime": shiftData.startTime,
-    "shiftData.endTime": shiftData.endTime,
+    "activeRoster.startTime": activeRoster.startTime,
+    "activeRoster.endTime": activeRoster.endTime,
     "shiftData.restTime": shiftData.restTime,
-    "shiftData.hours": shiftData.hours?.map((h) => h.value) || [],
+    "activeRoster.hours": activeRoster.hours?.map((h) => h.value) || [],
   });
   const { scheduleMode, startDate, switchTo7D, switchTo24H, updateStartDate } = useScheduleMode();
+
+  // Shift time presets
+  type PresetKey = "9to5" | "morning" | "noon" | "evening" | "24h" | "custom";
+  const presets: Record<Exclude<PresetKey, "custom">, { start: string; end: string }> = {
+    "9to5":    { start: "09:00", end: "17:00" },
+    "morning": { start: "06:00", end: "14:00" },
+    "noon":    { start: "12:00", end: "20:00" },
+    "evening": { start: "16:00", end: "00:00" },
+    "24h":     { start: "00:00", end: "00:00" },
+  };
+
+  const detectPreset = (start: string, end: string): PresetKey => {
+    for (const [key, val] of Object.entries(presets)) {
+      if (val.start === start && val.end === end) return key as PresetKey;
+    }
+    return "custom";
+  };
+
+  const [activePreset, setActivePreset] = useState<PresetKey>(() => detectPreset(localStartTime, localEndTime));
+  const [customTimes, setCustomTimes] = useState<{ start: string; end: string }>({ start: localStartTime, end: localEndTime });
+
+  const handlePresetChange = (preset: PresetKey) => {
+    setActivePreset(preset);
+    if (preset === "custom") {
+      handleStartTimeChange(customTimes.start);
+      handleEndTimeChange(customTimes.end);
+      updateShiftStateWithNewHours(customTimes.start, customTimes.end, intensity);
+    } else {
+      const { start, end } = presets[preset];
+      updateShiftStateWithNewHours(start, end, intensity);
+      onStartTimeChange?.(start);
+      onEndTimeChange?.(end);
+    }
+  };
+
+  const handleManualTimeChange = (type: "start" | "end", time: string) => {
+    setActivePreset("custom");
+    if (type === "start") {
+      setCustomTimes((prev) => ({ ...prev, start: time }));
+      handleStartTimeChange(time);
+    } else {
+      setCustomTimes((prev) => ({ ...prev, end: time }));
+      handleEndTimeChange(time);
+    }
+  };
 
   const [intensityOptions, setIntensityOptions] = useState([1, 2, 4, 6, 8]);
   const [intensityDurationMap, setIntensityDurationMap] = useState<{
     [intensity: number]: number;
   }>({});
+  const zeroRest = !!shiftData.zeroRest;
+  const setZeroRest = (val: boolean) => {
+    setShiftData((prev) => ({ ...prev, zeroRest: val }));
+  };
+
+  // Effective options: prepend 0 if zeroRest is enabled
+  const effectiveOptions = zeroRest && !intensityOptions.includes(0)
+    ? [0, ...intensityOptions]
+    : intensityOptions;
 
   // Calculate feasible intensity range based on current parameters
   useEffect(() => {
@@ -74,7 +130,9 @@ export function ShiftInfoSettingsView({
     );
 
     setIntensityOptions(result.feasibleIntensities);
-    setIntensityDurationMap(result.intensityDurationMap);
+    // Add 0-rest duration to the map for the zero-rest checkbox
+    const durationAt0 = getOptimalShiftDuration(localStartTime, localEndTime, posts.length, staffCount, 0);
+    setIntensityDurationMap({ ...result.intensityDurationMap, 0: durationAt0 > 0 ? durationAt0 : 0 });
 
     console.log("🎯 [ShiftInfoSettingsView] Intensity options updated:", {
       "current intensity": intensity,
@@ -105,33 +163,23 @@ export function ShiftInfoSettingsView({
   // Map intensity value to slider index and vice versa
   // Inverted mapping: left (index 0) = highest intensity, right (max index) = lowest intensity
   const getSliderIndex = (intensity: number) => {
-    const index = intensityOptions.indexOf(intensity);
+    const opts = effectiveOptions;
+    const index = opts.indexOf(intensity);
     if (index === -1) {
-      // If current intensity is not in options, find the closest match
-      const closestIndex = intensityOptions.reduce((closest, option, i) => {
+      const closestIndex = opts.reduce((closest, option, i) => {
         const currentDiff = Math.abs(option - intensity);
-        const closestDiff = Math.abs(intensityOptions[closest] - intensity);
+        const closestDiff = Math.abs(opts[closest] - intensity);
         return currentDiff < closestDiff ? i : closest;
       }, 0);
-
-      console.log(
-        `🎯 [ShiftInfoSettingsView] Intensity ${intensity} not in options [${intensityOptions.join(
-          ", "
-        )}], using closest match at index ${closestIndex} (${
-          intensityOptions[closestIndex]
-        })`
-      );
-      // Invert the index: if we found index 0, return max index, etc.
-      return intensityOptions.length - 1 - closestIndex;
+      return opts.length - 1 - closestIndex;
     }
-    // Invert the index: if intensity is at index 0, return max index, etc.
-    return intensityOptions.length - 1 - index;
+    return opts.length - 1 - index;
   };
 
   const getIntensityFromIndex = (index: number) => {
-    // Invert the index: if slider is at index 0, get the last (highest) intensity
-    const invertedIndex = intensityOptions.length - 1 - index;
-    return intensityOptions[invertedIndex];
+    const opts = effectiveOptions;
+    const invertedIndex = opts.length - 1 - index;
+    return opts[invertedIndex];
   };
 
   // Calculate shift starting times for logging
@@ -317,14 +365,18 @@ export function ShiftInfoSettingsView({
     newEndTime: string,
     newIntensity: number
   ) => {
-    // Calculate new shift duration and hours
-    const newDuration = calculateOptimalShiftDuration(
+    // Use the same calculation as the selector: calculateFeasibleIntensityRange
+    const rangeResult = calculateFeasibleIntensityRange(
       newStartTime,
       newEndTime,
-      newIntensity,
       posts.length,
       staffCount
     );
+    // For 0 rest, calculate directly since it's not in the standard range
+    const newDuration = rangeResult.intensityDurationMap[newIntensity]
+      ?? (newIntensity === 0
+        ? getOptimalShiftDuration(newStartTime, newEndTime, posts.length, staffCount, 0)
+        : 0);
 
     const newShiftStartTimes = calculateShiftStartingTimes(
       newStartTime,
@@ -352,15 +404,18 @@ export function ShiftInfoSettingsView({
     }
 
     setShiftData((prev) => {
+      const roster = getActiveRosterFromState(prev);
+      const activeRosterId = prev.activeRosterId;
+
       // CRITICAL FIX: Update user constraints to match new hours structure
       const updatedUserShiftData = (prev.userShiftData || []).map(
         (userData) => {
-          const updatedConstraints = (prev.posts || []).map((post) => {
+          const updatedConstraints = (roster.posts || []).map((post) => {
             // For each post, ensure we have constraints for all new hours
             return newHours.map((hour, hourIndex) => {
               // Try to preserve existing constraint if it exists, otherwise create new one
               const existingConstraint =
-                userData.constraints?.[prev.posts?.indexOf(post) || 0]?.[
+                userData.constraints?.[roster.posts?.indexOf(post) || 0]?.[
                   hourIndex
                 ];
               return (
@@ -376,49 +431,30 @@ export function ShiftInfoSettingsView({
           return {
             ...userData,
             constraints: updatedConstraints,
+            constraintsByRoster: {
+              ...userData.constraintsByRoster,
+              [activeRosterId]: updatedConstraints,
+            },
           };
         }
       );
 
-      console.log(
-        "🔄 [ShiftInfoSettingsView] Updated user constraints to match new hours:",
-        {
-          oldHoursCount: prev.hours?.length || 0,
-          newHoursCount: newHours.length,
-          usersUpdated: updatedUserShiftData.length,
-          sampleConstraints:
-            updatedUserShiftData[0]?.constraints?.map((post) => post.length) ||
-            [],
-          sampleAvailability:
-            updatedUserShiftData[0]?.constraints?.[0]?.map(
-              (slot) => slot.availability
-            ) || [],
-          warning:
-            "IMPORTANT: User constraints updated - optimization cache should be invalidated",
-        }
-      );
-
       // CRITICAL FIX: Clear assignments when hours structure changes
-      // This invalidates the optimization cache and forces re-optimization
-      const shouldClearAssignments = prev.hours?.length !== newHours.length;
+      const shouldClearAssignments = roster.hours?.length !== newHours.length;
       const clearedAssignments = shouldClearAssignments
-        ? (prev.posts || []).map(() => newHours.map(() => null))
-        : prev.assignments;
-
-      if (shouldClearAssignments) {
-        console.log(
-          "🔄 [ShiftInfoSettingsView] Clearing assignments due to hours structure change"
-        );
-      }
+        ? (roster.posts || []).map(() => newHours.map(() => null))
+        : roster.assignments;
 
       return {
-        ...prev,
-        startTime: newStartTime,
-        endTime: newEndTime,
+        ...updateActiveRoster(prev, (r) => ({
+          ...r,
+          startTime: newStartTime,
+          endTime: newEndTime,
+          hours: newHours,
+          assignments: clearedAssignments,
+        })),
         restTime: newIntensity,
-        hours: newHours,
         userShiftData: updatedUserShiftData,
-        assignments: clearedAssignments,
       };
     });
 
@@ -505,20 +541,20 @@ export function ShiftInfoSettingsView({
     console.log(
       "✅ [ShiftInfoSettingsView] Component mounted with global state:",
       {
-        "global startTime": shiftData.startTime,
-        "global endTime": shiftData.endTime,
+        "global startTime": activeRoster.startTime,
+        "global endTime": activeRoster.endTime,
         "global restTime": shiftData.restTime,
-        "global hours": shiftData.hours?.map((h) => h.value) || [],
+        "global hours": activeRoster.hours?.map((h) => h.value) || [],
         "props startHour": startHour,
         "props endHour": endHour,
         "props restTime": restTime,
       }
     );
   }, [
-    shiftData.startTime,
-    shiftData.endTime,
+    activeRoster.startTime,
+    activeRoster.endTime,
     shiftData.restTime,
-    shiftData.hours,
+    activeRoster.hours,
     startHour,
     endHour,
     restTime,
@@ -540,36 +576,22 @@ export function ShiftInfoSettingsView({
 
   return (
     <div
-      className={`w-full h-full pt-2 p-1 rounded-lg flex flex-col bg-white/90 backdrop-blur-md shadow-xl min-h-0 max-w-full overflow-hidden border-2 border-black ${className}`}
+      className={`w-full p-1 flex flex-col max-w-full ${className}`}
     >
-      <div className="flex justify-between items-center mb-1">
-        <h4 className="text-base font-semibold text-start">{t("shiftAdjustment")}</h4>
-        {onClose && (
-          <button
-            onClick={onClose}
-            aria-label={t("closeShiftAdjustment")}
-            title={t("closeShiftAdjustment")}
-            className="p-1 rounded-md hover:bg-gray-100 transition-colors"
-          >
-            <IconX size={16} />
-          </button>
-        )}
-      </div>
-
       {/* Schedule Mode Section */}
-      <div className="flex-shrink-0 mb-2">
-        <div className="border border-gray-300 rounded-lg p-3">
-          <div className="text-xs font-medium text-gray-700 mb-2 text-start">
+      <div className="flex-shrink-0 mb-1">
+        <div className="border border-border rounded-lg p-2">
+          <div className="text-xs font-medium text-foreground mb-1 text-start">
             {t("scheduleMode")}
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex rounded-md border border-gray-300 overflow-hidden">
+            <div className="flex rounded-md border border-border overflow-hidden">
               <button
                 onClick={() => { if (scheduleMode !== "24h") switchTo24H(); }}
                 className={`px-4 py-1.5 text-sm font-medium transition-colors ${
                   scheduleMode === "24h"
                     ? "bg-primary text-primary-foreground"
-                    : "bg-white text-gray-600 hover:bg-gray-50"
+                    : "bg-background text-muted-foreground hover:bg-accent"
                 }`}
               >
                 {t("singleDay")}
@@ -579,7 +601,7 @@ export function ShiftInfoSettingsView({
                 className={`px-4 py-1.5 text-sm font-medium transition-colors ${
                   scheduleMode === "7d"
                     ? "bg-primary text-primary-foreground"
-                    : "bg-white text-gray-600 hover:bg-gray-50"
+                    : "bg-background text-muted-foreground hover:bg-accent"
                 }`}
               >
                 {t("weeklyRoster")}
@@ -587,12 +609,12 @@ export function ShiftInfoSettingsView({
             </div>
             {scheduleMode === "7d" && (
               <div className="flex items-center gap-2">
-                <label className="text-xs text-gray-600">{t("startingDate")}</label>
+                <label className="text-xs text-muted-foreground">{t("startingDate")}</label>
                 <input
                   type="date"
                   value={startDate || ""}
                   onChange={(e) => updateStartDate(e.target.value)}
-                  className="px-2 py-1 border border-gray-300 rounded text-sm"
+                  className="px-2 py-1 border border-border rounded text-sm bg-background text-foreground"
                 />
               </div>
             )}
@@ -600,135 +622,206 @@ export function ShiftInfoSettingsView({
         </div>
       </div>
 
-      {/* Top row - Range and Information */}
-      <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-start mb-2 flex-shrink-0 min-w-0">
-        {/* Shifts Range Section */}
-        <div className="flex-1 min-w-[280px] w-full sm:w-auto">
-          <div className="border border-gray-300 rounded-lg p-3">
-            <div className="flex justify-between items-center mb-2">
-              <div className="text-xs font-medium text-gray-700 text-start">
-                {t("shiftInput")}
-              </div>
-              <div className="text-xs font-medium text-primary">
-                {(() => {
-                  const [startHours, startMinutes] = localStartTime
-                    .split(":")
-                    .map(Number);
-                  const [endHours, endMinutes] = localEndTime
-                    .split(":")
-                    .map(Number);
-                  const startTotalMinutes = startHours * 60 + startMinutes;
-                  const endTotalMinutes = endHours * 60 + endMinutes;
-                  let durationMinutes = endTotalMinutes - startTotalMinutes;
-                  if (durationMinutes <= 0) durationMinutes += 24 * 60; // Handle overnight
-                  const hours = Math.round(durationMinutes / 60);
-                  return `${hours}hr`;
-                })()}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="flex flex-col items-center flex-1 min-w-[90px] max-w-[160px]">
-                <label className="text-xs text-gray-600 mb-2">{t("start")}</label>
-                <input
-                  type="time"
-                  value={localStartTime}
-                  onChange={(e) => handleStartTimeChange(e.target.value)}
-                  className="w-full px-2 py-1 border border-gray-300 rounded text-center text-sm"
-                />
-              </div>
-              <div className="flex items-center px-1">
-                <span className="text-gray-400 font-medium icon-flip">→</span>
-              </div>
-              <div className="flex flex-col items-center flex-1 min-w-[90px] max-w-[160px]">
-                <label className="text-xs text-gray-600 mb-2">{t("end")}</label>
-                <input
-                  type="time"
-                  value={localEndTime}
-                  onChange={(e) => handleEndTimeChange(e.target.value)}
-                  className="w-full px-2 py-1 border border-gray-300 rounded text-center text-sm"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Shift Information Section */}
-        <div className="flex-1 min-w-[280px] w-full sm:w-auto">
-          <div className="border border-gray-300 rounded-lg p-3">
-            <div className="text-xs font-medium text-gray-700 mb-2 text-start">
-              {t("shiftInformation")}
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="flex flex-col items-center flex-1 min-w-[100px] max-w-[140px]">
-                <label className="text-xs text-gray-600 mb-2">{t("rest")}</label>
-                <div className="w-full px-2 py-1 border border-gray-300 rounded text-center text-sm bg-gray-50">
-                  {intensity.toFixed(1)}h
-                </div>
-              </div>
-              <div className="flex items-center px-1">
-                <span className="text-gray-400 font-medium icon-flip">→</span>
-              </div>
-              <div className="flex flex-col items-center flex-1 min-w-[100px] max-w-[140px]">
-                <label className="text-xs text-gray-600 mb-2">{t("duration")}</label>
-                <div className="w-full px-2 py-1 border border-gray-300 rounded text-center text-sm bg-gray-50 text-primary font-medium">
-                  {shiftDuration.toFixed(2)}h
-                </div>
-              </div>
-            </div>
+      {/* Shift Input — preset dropdown + time inputs */}
+      <div className="flex-shrink-0 mb-1">
+        <div className="border border-border rounded-lg px-2 py-1.5">
+          <div className="flex items-center gap-2">
+            <select
+              value={activePreset}
+              onChange={(e) => handlePresetChange(e.target.value as PresetKey)}
+              className="px-1.5 py-0.5 border border-border rounded text-sm bg-background text-foreground cursor-pointer"
+            >
+              <option value="9to5">{t("preset9to5", { defaultValue: "9-to-5" })}</option>
+              <option value="morning">{t("presetMorning", { defaultValue: "Morning" })}</option>
+              <option value="noon">{t("presetNoon", { defaultValue: "Noon" })}</option>
+              <option value="evening">{t("presetEvening", { defaultValue: "Evening" })}</option>
+              <option value="24h">{t("preset24h", { defaultValue: "24H" })}</option>
+              <option value="custom">{t("presetCustom", { defaultValue: "Custom" })}</option>
+            </select>
+            <TimeInput
+              value={localStartTime}
+              onChange={(time) => handleManualTimeChange("start", time)}
+              className="flex-1"
+            />
+            <span className="text-muted-foreground font-medium icon-flip">→</span>
+            <TimeInput
+              value={localEndTime}
+              onChange={(time) => handleManualTimeChange("end", time)}
+              className="flex-1"
+            />
+            <span className="text-xs font-medium text-primary whitespace-nowrap">
+              {(() => {
+                const [sH, sM] = localStartTime.split(":").map(Number);
+                const [eH, eM] = localEndTime.split(":").map(Number);
+                let mins = (eH * 60 + eM) - (sH * 60 + sM);
+                if (mins <= 0) mins += 24 * 60;
+                return `${Math.round(mins / 60)}hr`;
+              })()}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Spacer to push intensity to bottom */}
-      <div className="flex-1"></div>
-
-      {/* Intensity Section - Below the top row */}
+      {/* Intensity + Shift Information row */}
       <div className="flex-shrink-0">
-        <div className="border border-gray-300 rounded-lg p-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">{t("intense")}</span>
-            <div className="flex-1">
-              <input
-                type="range"
-                min="0"
-                max={intensityOptions.length - 1}
-                step="1"
-                value={getSliderIndex(intensity)}
-                onChange={(e) => {
-                  const newIntensity = getIntensityFromIndex(
-                    parseInt(e.target.value)
-                  );
-                  handleIntensityChange(newIntensity);
-                }}
-                className="w-full h-1 bg-black rounded-lg appearance-none cursor-pointer slider
-                  [&::-webkit-slider-thumb]:appearance-none
-                  [&::-webkit-slider-thumb]:h-3 
-                  [&::-webkit-slider-thumb]:w-3 
-                  [&::-webkit-slider-thumb]:rounded-full 
-                  [&::-webkit-slider-thumb]:bg-primary
-                  [&::-webkit-slider-thumb]:cursor-pointer
-                  [&::-moz-range-thumb]:h-3
-                  [&::-moz-range-thumb]:w-3
-                  [&::-moz-range-thumb]:rounded-full
-                  [&::-moz-range-thumb]:bg-primary
-                  [&::-moz-range-thumb]:cursor-pointer
-                  [&::-moz-range-thumb]:border-none"
-              />
-            </div>
-            <span className="text-xs text-gray-500">{t("relaxed")}</span>
-          </div>
+        <div className="border border-border rounded-lg p-2 space-y-1">
+          <h3 className="text-xs font-semibold text-muted-foreground">{t("shiftIntensity")}</h3>
+          {effectiveOptions.length > 0 ? (() => {
+            // Check if all options produce the same duration
+            const durations = new Set(effectiveOptions.map((o) => (intensityDurationMap[o] ?? 0).toFixed(2)));
+            const allSame = durations.size <= 1 && effectiveOptions.length > 1;
+
+            return allSame ? (
+              // All options yield the same result — no slider needed
+              <div className="space-y-1">
+                <div className="flex items-center gap-3 text-xs">
+                  <span className="text-muted-foreground">{t("intensityFixed")}</span>
+                  <span className="text-muted-foreground whitespace-nowrap">{t("shiftsLabel", { defaultValue: "Shifts" })}: <span className="font-medium text-foreground">{scheduleInfo.shiftsCount}</span></span>
+                  <span className="text-muted-foreground whitespace-nowrap">{t("duration")}: <span className="font-medium text-primary">{scheduleInfo.shiftDuration.toFixed(1)}h</span></span>
+                </div>
+                <label className="flex items-center gap-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={zeroRest}
+                    onChange={(e) => {
+                      setZeroRest(e.target.checked);
+                      if (e.target.checked) {
+                        handleIntensityChange(0);
+                      } else if (intensity === 0) {
+                        handleIntensityChange(intensityOptions[0] || 1);
+                      }
+                    }}
+                    className="h-3 w-3 rounded border-border"
+                  />
+                  <span className="text-[10px] text-muted-foreground">{t("zeroRest")}</span>
+                </label>
+              </div>
+            ) : (
+              // Multiple distinct options — show slider
+              <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">{t("relaxed")}</span>
+                <div className="flex-1 flex items-center relative h-4">
+                  <div className="absolute inset-x-[6px] h-1 bg-border rounded-lg flex items-center justify-between">
+                    {effectiveOptions.map((opt, i) => {
+                      const [sH] = localStartTime.split(":").map(Number);
+                      const [eH] = localEndTime.split(":").map(Number);
+                      let opH = eH - sH;
+                      if (opH <= 0) opH += 24;
+                      const maxW = Math.max(0, opH - Math.min(opt, opH * 0.8));
+                      const cap = staffCount * maxW;
+                      const dur = intensityDurationMap[opt] ?? 0;
+                      const shifts = dur > 0 ? Math.floor(opH / dur) : 0;
+                      const need = shifts * posts.length * dur;
+                      const overCap = need > cap && cap > 0;
+                      return (
+                        <div
+                          key={i}
+                          className={`w-1.5 h-1.5 rounded-full ${overCap ? "bg-red-500" : "bg-muted-foreground/40"}`}
+                          title={overCap ? t("hintOverCapacity", { capacity: cap.toFixed(0), needed: need.toFixed(0) }) : ""}
+                        />
+                      );
+                    })}
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max={effectiveOptions.length - 1}
+                    step="1"
+                    value={getSliderIndex(intensity)}
+                    onChange={(e) => {
+                      const newIntensity = getIntensityFromIndex(
+                        parseInt(e.target.value)
+                      );
+                      handleIntensityChange(newIntensity);
+                    }}
+                    className="relative z-10 w-full h-1 bg-transparent rounded-lg appearance-none cursor-pointer
+                      [&::-webkit-slider-thumb]:appearance-none
+                      [&::-webkit-slider-thumb]:h-3
+                      [&::-webkit-slider-thumb]:w-3
+                      [&::-webkit-slider-thumb]:rounded-full
+                      [&::-webkit-slider-thumb]:bg-primary
+                      [&::-webkit-slider-thumb]:cursor-pointer
+                      [&::-moz-range-thumb]:h-3
+                      [&::-moz-range-thumb]:w-3
+                      [&::-moz-range-thumb]:rounded-full
+                      [&::-moz-range-thumb]:bg-primary
+                      [&::-moz-range-thumb]:cursor-pointer
+                      [&::-moz-range-thumb]:border-none"
+                  />
+                </div>
+                <span className="text-xs text-muted-foreground">{t("intense")}</span>
+                <span className="text-muted-foreground/50 mx-1">|</span>
+                <span className="text-xs text-muted-foreground whitespace-nowrap">{t("shiftsLabel", { defaultValue: "Shifts" })}: <span className="font-medium text-foreground">{scheduleInfo.shiftsCount}</span></span>
+                <span className="text-xs text-muted-foreground whitespace-nowrap">{t("rest")}: <span className="font-medium text-foreground">{intensity.toFixed(1)}h</span></span>
+                <span className="text-xs text-muted-foreground whitespace-nowrap">{t("duration")}: <span className="font-medium text-primary">{scheduleInfo.shiftDuration.toFixed(2)}h</span></span>
+              </div>
+              <label className="flex items-center gap-1 cursor-pointer ps-[3.5rem]">
+                <input
+                  type="checkbox"
+                  checked={zeroRest}
+                  onChange={(e) => {
+                    setZeroRest(e.target.checked);
+                    if (e.target.checked) {
+                      handleIntensityChange(0);
+                    } else if (intensity === 0) {
+                      handleIntensityChange(intensityOptions[0] || 1);
+                    }
+                  }}
+                  className="h-3 w-3 rounded border-border"
+                />
+                <span className="text-[10px] text-muted-foreground">{t("zeroRest")}</span>
+              </label>
+              </div>
+            );
+          })() : (
+            <p className="text-xs text-muted-foreground text-center py-1">
+              {t("noFeasibleSchedule")}
+            </p>
+          )}
         </div>
       </div>
 
       {/* Info Section */}
-      <div className="flex-shrink-0 mt-2">
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-2">
-          <p className="text-xs text-gray-700 text-start">
-            <span className="font-semibold">{t("howItWorks")}:</span>{" "}
-            {scheduleMode === "7d"
-              ? t("howItWorksDetail7d", { posts: posts.length, staff: staffCount, shifts: shiftStartTimes.length, duration: shiftDuration.toFixed(1) })
-              : t("howItWorksDetail", { posts: posts.length, staff: staffCount, shifts: shiftStartTimes.length, duration: shiftDuration.toFixed(1) })}
-          </p>
+      <div className="flex-shrink-0 mt-1">
+        <div className="bg-primary/5 border border-primary/20 rounded-lg p-2">
+          {(() => {
+            const [sh] = localStartTime.split(":").map(Number);
+            const [eh] = localEndTime.split(":").map(Number);
+            let opHours = eh - sh;
+            if (opHours <= 0) opHours += 24;
+            const maxWorkPerPerson = Math.max(0, opHours - Math.min(intensity, opHours * 0.8));
+            const totalCapacity = staffCount * maxWorkPerPerson;
+            const totalNeeded = scheduleInfo.shiftsCount * posts.length * scheduleInfo.shiftDuration;
+            const params = {
+              posts: posts.length,
+              staff: staffCount,
+              shifts: scheduleInfo.shiftsCount,
+              duration: scheduleInfo.shiftDuration.toFixed(1),
+              opHours,
+              rest: intensity,
+              start: localStartTime,
+              end: localEndTime,
+              maxWork: maxWorkPerPerson.toFixed(1),
+              totalCapacity: totalCapacity.toFixed(0),
+              totalNeeded: totalNeeded.toFixed(0),
+            };
+            const overCapacity = totalNeeded > totalCapacity && totalCapacity > 0;
+            return (
+              <div className="text-xs text-foreground text-start space-y-1">
+                <p>
+                  <span className="font-semibold">{t("howItWorks")}:</span>{" "}
+                  {scheduleMode === "7d"
+                    ? t("howItWorksDetail7d", params)
+                    : t("howItWorksDetail", params)}
+                </p>
+                <p className={overCapacity ? "text-red-500 font-medium" : "text-muted-foreground"}>
+                  {t("constraintsDetail", params)}
+                  {overCapacity && ` ⚠ ${t("overCapacity")}`}
+                </p>
+              </div>
+            );
+          })()}
         </div>
       </div>
     </div>

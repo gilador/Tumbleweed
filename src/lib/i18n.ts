@@ -3,6 +3,7 @@ import { initReactI18next } from "react-i18next";
 import LanguageDetector from "i18next-browser-languagedetector";
 import en from "../locales/en.json";
 import he from "../locales/he.json";
+import { notifyPreferencesChanged } from "./localStorageUtils";
 
 const RTL_LANGUAGES = ["he", "ar"];
 
@@ -37,7 +38,8 @@ i18n
       en: { translation: en },
       he: { translation: he },
     },
-    fallbackLng: "en",
+    fallbackLng: "he",
+    lng: localStorage.getItem("tumbleweed-lang") || "he",
     interpolation: {
       escapeValue: false,
     },
@@ -51,6 +53,7 @@ i18n
 i18n.on("languageChanged", (lng) => {
   updateDocumentDirection(lng);
   syncLanguageToServer(lng);
+  notifyPreferencesChanged();
 });
 
 // Set initial direction

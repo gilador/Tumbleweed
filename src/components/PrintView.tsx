@@ -1,7 +1,7 @@
 import { createPortal } from "react-dom";
 import { useRecoilValue } from "recoil";
 import { useTranslation } from "react-i18next";
-import { shiftState } from "../stores/shiftStore";
+import { shiftState, getActiveRosterFromState } from "../stores/shiftStore";
 import tumbleweedIcon from "../../assets/tumbleweed.svg";
 import { getDaySlice, getDisplayTime } from "../service/weeklyScheduleUtils";
 import { getDayLabel, getTodayISO } from "../service/dayLabelUtils";
@@ -9,7 +9,9 @@ import { getDayLabel, getTodayISO } from "../service/dayLabelUtils";
 function PrintViewContent() {
   const { t, i18n } = useTranslation();
   const state = useRecoilValue(shiftState);
-  const { posts, hours, assignments, userShiftData, endTime, customCellDisplayNames, scheduleMode, startDate } = state;
+  const activeRoster = getActiveRosterFromState(state);
+  const { posts, hours, assignments, endTime, customCellDisplayNames, scheduleMode, startDate } = activeRoster;
+  const { userShiftData } = state;
   const locale = i18n.language === "he" ? "he-IL" : "en-US";
   const isWeekly = scheduleMode === "7d";
   const numDays = isWeekly ? 7 : 1;

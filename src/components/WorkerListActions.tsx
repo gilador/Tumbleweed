@@ -1,6 +1,6 @@
 import {
-  IconUserPlus,
-  IconUserMinus,
+  IconPlus,
+  IconTrash,
   IconSelectAll,
   IconDeselect,
   IconRestore,
@@ -79,7 +79,7 @@ export function WorkerListActions({
         title={t("addUser")}
         className="p-1.5 rounded-full hover:bg-white/20 transition-colors"
       >
-        <IconUserPlus size={15} />
+        <IconPlus size={15} />
       </button>
       <button
         onClick={handleDelete}
@@ -87,7 +87,7 @@ export function WorkerListActions({
         title={t("deleteSelectedUsers")}
         className="p-1.5 rounded-full hover:bg-white/20 transition-colors"
       >
-        <IconUserMinus size={15} />
+        <IconTrash size={15} />
       </button>
       <button
         onClick={handleCheckAll}
