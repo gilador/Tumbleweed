@@ -9,8 +9,16 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="apple-touch-icon" href="/tumbleweed/pwa-192x192.png" />
     <title>Tumbleweed</title>
-    <script type="module" crossorigin src="/tumbleweed/assets/index-B6ur_7ij.js"></script>
-    <link rel="stylesheet" crossorigin href="/tumbleweed/assets/index-CF0DUfE8.css">
+    <script>
+      // Apply theme before React renders to prevent flash of wrong theme
+      (function() {
+        var theme = localStorage.getItem('tumbleweed-theme') || 'light';
+        var dark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) document.documentElement.classList.add('dark');
+      })();
+    </script>
+    <script type="module" crossorigin src="/tumbleweed/assets/index-CuZjymOe.js"></script>
+    <link rel="stylesheet" crossorigin href="/tumbleweed/assets/index-BvaKy35b.css">
   <link rel="manifest" href="/tumbleweed/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/tumbleweed/registerSW.js"></script></head>
   <body>
     <div id="root"></div>
