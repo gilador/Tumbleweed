@@ -56,7 +56,7 @@ export function StaffTab({
             return (
               <div
                 key={userData.user.id}
-                className="flex items-center min-h-[52px] rounded-lg border border-black"
+                className="flex items-center min-h-[52px] rounded-lg border border-border"
               >
                 {isDeleting ? (
                   <div className="flex-1 flex items-center justify-between px-4 py-2">
@@ -99,7 +99,7 @@ export function StaffTab({
                     </button>
                     <button
                       onClick={() => setDeleteConfirmUserId(userData.user.id)}
-                      className="p-3 hover:bg-accent min-h-[52px] flex items-center justify-center border-s border-black"
+                      className="p-3 hover:bg-accent min-h-[52px] flex items-center justify-center border-s border-border"
                     >
                       <IconTrash size={16} className="text-muted-foreground" />
                     </button>

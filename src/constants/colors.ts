@@ -6,32 +6,32 @@ export const colors = {
   },
   // Available but unassigned cells
   available: {
-    default: "bg-white border border-black",
-    hover: "hover:bg-gray-50",
+    default: "bg-background border border-foreground",
+    hover: "hover:bg-accent",
   },
   // Unavailable cells
   unavailable: {
-    default: "bg-black",
-    hover: "hover:bg-gray-900",
+    default: "bg-foreground",
+    hover: "hover:bg-foreground/80",
   },
   // Selected user cells
   selected: {
-    default: "bg-black text-white",
-    hover: "hover:bg-gray-800",
+    default: "bg-foreground text-background",
+    hover: "hover:bg-foreground/80",
   },
   // Cell colors
   cell: {
-    default: "bg-[#d1d5db]",
-    selected: "bg-black text-white",
-    dim: "bg-[#d1d5db]/30",
+    default: "bg-muted",
+    selected: "bg-foreground text-background",
+    dim: "bg-muted/30",
     error: "bg-red-600 text-white",
   },
   // Text colors
   text: {
-    default: "bg-white text-gray-600",    
+    default: "bg-background text-muted-foreground",
   },
   subtitle: {
-    default: "text-gray-400",
+    default: "text-muted-foreground",
   },
   // Button colors
   button: {

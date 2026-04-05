@@ -11,8 +11,9 @@ import { EditButton } from "./EditButton";
 import { EditableText } from "./EditableText";
 import { ActionableText } from "./VerticalActionGroup";
 import { ShiftDuration } from "./ShiftDuration";
-import { shiftState } from "../stores/shiftStore";
+import { shiftState, getActiveRosterFromState } from "../stores/shiftStore";
 import { DayTabStrip, DayIndicator } from "./DayTabStrip";
+import { getRosterColor } from "./RosterSwitcher";
 import { AvailabilityCopyBar } from "./AvailabilityCopyBar";
 import { getDisplayTime, getDaySlice } from "../service/weeklyScheduleUtils";
 import { getTodayISO } from "../service/dayLabelUtils";
@@ -33,7 +34,7 @@ export interface AvailabilityTableViewProps {
   selectedUserId?: string | null;
   className?: string;
   checkedPostIds?: string[];
-  onPostCheck?: (postId: string) => void;
+  onPostCheck?: (postId: string, event?: React.MouseEvent) => void;
   onPostUncheck?: (postId: string) => void;
   onAssignmentEdit?: (
     postIndex: number,
@@ -165,7 +166,10 @@ export function AvailabilityTableView({
   onShowToast,
 }: AvailabilityTableViewProps) {
   const { t } = useTranslation();
-  const { scheduleMode, startDate } = useRecoilValue(shiftState);
+  const state = useRecoilValue(shiftState);
+  const activeRoster = getActiveRosterFromState(state);
+  const scheduleMode = activeRoster.scheduleMode;
+  const startDate = activeRoster.startDate;
   const [selectedDay, setSelectedDay] = useState(0);
   const [optimisticLocalConstraints, setOptimisticLocalConstraints] = useState<
     Constraint[][] | null
@@ -495,27 +499,36 @@ export function AvailabilityTableView({
     >
       {mode === "availability" && (
         <div className="h-10 flex items-center justify-between px-2 flex-none">
-          <h3 className="text-lg font-semibold">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
             {/* Show user name if user and availabilityConstraints are present, else show generic or nothing */}
             {user && availabilityConstraints
               ? t("userAvailability", { name: user.name })
               : availabilityConstraints
               ? t("availability")
               : "\b"}
+            {state.rosters.length > 1 && activeRoster.name && (
+              <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded inline-flex items-center gap-1.5">
+                <span
+                  className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: getRosterColor(state.rosters.findIndex((r) => r.id === state.activeRosterId)) }}
+                />
+                {activeRoster.name}
+              </span>
+            )}
           </h3>
           {availabilityConstraints && (
             <div className="flex gap-2">
               <Button
                 onClick={handleReset}
                 variant="outline"
-                className="bg-white border-black text-black hover:bg-gray-50 rounded-lg h-8 text-xs px-3"
+                className="bg-background border-border text-foreground hover:bg-accent rounded-lg h-8 text-xs px-3"
               >
                 {t("allAvailable")}
               </Button>
               <Button
                 onClick={handleSetAllUnavailable}
                 variant="outline"
-                className="bg-white border-black text-black hover:bg-gray-50 rounded-lg h-8 text-xs px-3"
+                className="bg-background border-border text-foreground hover:bg-accent rounded-lg h-8 text-xs px-3"
               >
                 {t("unavailable")}
               </Button>
@@ -532,7 +545,7 @@ export function AvailabilityTableView({
           <img
             src={tumbleweedAnimation}
             alt="Tumbleweed"
-            className="h-12 mb-2 m-2 rounded-[10px]"
+            className="h-12 mb-2 m-2 rounded-[10px] dark-invert"
           />
           <div className="font-semibold text-center self-center ">
             {t("pickStaffMember")}
@@ -590,19 +603,19 @@ export function AvailabilityTableView({
                         }}
                         className={`absolute end-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 border-2 ${
                           allAvailable
-                            ? 'bg-black border-white hover:bg-gray-800'
-                            : 'bg-white border-black hover:bg-gray-100'
+                            ? 'bg-foreground border-background hover:bg-foreground/80'
+                            : 'bg-background border-foreground hover:bg-accent'
                         }`}
                         title={t("toggleHourColumnAvailability")}
                       >
                         {allAvailable ? (
                           <IconX
-                            className="w-3 h-3 text-white"
+                            className="w-3 h-3 text-background"
                             stroke={3}
                           />
                         ) : (
                           <IconCheck
-                            className="w-3 h-3 text-black"
+                            className="w-3 h-3 text-foreground"
                             stroke={3}
                           />
                         )}
@@ -632,19 +645,19 @@ export function AvailabilityTableView({
                           }}
                           className={`absolute end-4 w-6 h-6 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 border-2 ${
                             allAvailable
-                              ? 'bg-black border-white hover:bg-gray-800'
-                              : 'bg-white border-black hover:bg-gray-100'
+                              ? 'bg-foreground border-background hover:bg-foreground/80'
+                              : 'bg-background border-foreground hover:bg-accent'
                           }`}
                           title={t("togglePostAvailability")}
                         >
                           {allAvailable ? (
                             <IconX
-                              className="w-4 h-4 text-white"
+                              className="w-4 h-4 text-background"
                               stroke={3}
                             />
                           ) : (
                             <IconCheck
-                              className="w-4 h-4 text-black"
+                              className="w-4 h-4 text-foreground"
                               stroke={3}
                             />
                           )}
@@ -677,12 +690,12 @@ export function AvailabilityTableView({
                         >
                           <div className="w-4 h-4 flex items-center justify-center">
                             {isAvailable ? (
-                              <div className="w-4 h-4 bg-black rounded-full flex items-center justify-center">
-                                <IconCheck className="w-3 h-3 text-white" stroke={3} />
+                              <div className="w-4 h-4 bg-foreground rounded-full flex items-center justify-center">
+                                <IconCheck className="w-3 h-3 text-background" stroke={3} />
                               </div>
                             ) : (
-                              <div className="w-4 h-4 bg-white rounded-full flex items-center justify-center">
-                                <IconX className="w-3 h-3 text-black" stroke={3} />
+                              <div className="w-4 h-4 bg-background rounded-full flex items-center justify-center">
+                                <IconX className="w-3 h-3 text-foreground" stroke={3} />
                               </div>
                             )}
                           </div>
@@ -744,7 +757,7 @@ export function AvailabilityTableView({
                         value={post.value}
                         isEditing={isEditing}
                         isChecked={checkedPostIds.includes(post.id)}
-                        onCheck={() => onPostCheck?.(post.id)}
+                        onCheck={(e) => onPostCheck?.(post.id, e)}
                         onUncheck={() => onPostUncheck?.(post.id)}
                         onUpdate={(id, newValue) =>
                           handlePostNameChange(id, newValue)

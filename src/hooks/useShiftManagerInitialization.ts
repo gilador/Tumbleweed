@@ -1,17 +1,16 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useRecoilState } from "recoil";
-import { shiftState, PersistedShiftData } from "../stores/shiftStore";
+import { shiftState, PersistedShiftData, isLegacyFormat, migrateLegacyState } from "../stores/shiftStore";
 import {
   loadStateFromLocalStorage,
   LOCAL_STORAGE_KEY,
 } from "../lib/localStorageUtils";
-import { UserShiftData } from "../models";
+import { UserShiftData, RosterState } from "../models";
 import {
   defaultPosts,
   OPERATION_START_TIME,
   OPERATION_END_TIME,
   MINIMUM_REST_TIME,
-  DEFAULT_STAFF_COUNT,
 } from "../constants/shiftManagerConstants";
 import {
   generateDynamicHours,
@@ -20,7 +19,6 @@ import {
 
 export function useShiftManagerInitialization() {
   const [recoilState, setRecoilState] = useRecoilState(shiftState);
-  const lastAppliedConstraintsSignature = useRef<string | null>(null);
 
   // Effect for initial loading from localStorage AND setting default workers if needed
   useEffect(() => {
@@ -34,92 +32,65 @@ export function useShiftManagerInitialization() {
       console.log("[ShiftManager useEffect] setupInitialData: Starting.");
       // 1. Set to syncing
       if (isMounted.current) {
-        setRecoilState((prev) => {
-          console.log(
-            "[ShiftManager useEffect] setupInitialData: Setting syncStatus to 'syncing'. Prev state:",
-            prev
-          );
-          // Ensure assignments is initialized here if not already, based on defaultPosts/Hours
-          const initialAssignments =
-            prev.assignments && prev.assignments.length > 0
-              ? prev.assignments
-              : defaultPosts.map(() => [].map(() => null));
-          return {
-            ...prev,
-            syncStatus: "syncing",
-            assignments: initialAssignments,
-            manuallyEditedSlots: prev.manuallyEditedSlots || {},
-            customCellDisplayNames: prev.customCellDisplayNames || {},
-          };
-        });
+        setRecoilState((prev) => ({
+          ...prev,
+          syncStatus: "syncing",
+        }));
       }
 
       try {
         // 2. Try loading from localStorage
-        const savedData = await loadStateFromLocalStorage<PersistedShiftData>(
+        const rawSavedData = await loadStateFromLocalStorage<any>(
           LOCAL_STORAGE_KEY
         );
 
         if (!isMounted.current) return;
 
         // Generate dynamic hours based on operation parameters
-        console.log(
-          "useShiftManagerInitialization: Generating dynamic hours with parameters:",
-          {
-            startTime: OPERATION_START_TIME,
-            endTime: OPERATION_END_TIME,
-            postCount: defaultPosts.length,
-            staffCount: DEFAULT_STAFF_COUNT,
-            minimumRestTime: MINIMUM_REST_TIME,
-          }
-        );
-
         const dynamicHours = generateDynamicHours(
           OPERATION_START_TIME,
           OPERATION_END_TIME,
           defaultPosts.length,
-          DEFAULT_STAFF_COUNT,
+          2, // default bootstrap creates 2 workers
           MINIMUM_REST_TIME
         );
 
-        console.log(
-          "useShiftManagerInitialization: Generated dynamic hours:",
-          dynamicHours
-        );
+        // Detect and migrate legacy format
+        let savedData: PersistedShiftData | null = null;
+        if (rawSavedData) {
+          if (isLegacyFormat(rawSavedData)) {
+            console.log("[ShiftManager] Detected legacy format, migrating...");
+            savedData = migrateLegacyState(rawSavedData);
+          } else if (rawSavedData.rosters) {
+            savedData = rawSavedData as PersistedShiftData;
+          }
+        }
 
         if (savedData && savedData.hasInitialized) {
           console.log(
-            `[ShiftManager useEffect] setupInitialData: Found saved data. Setting state.`,
+            `[ShiftManager useEffect] setupInitialData: Found saved data.`,
             savedData
           );
 
-          console.log(
-            "useShiftManagerInitialization: Saved hours vs dynamic hours comparison:",
-            {
-              savedHours: savedData.hours,
-              dynamicHours: dynamicHours,
-              usingSavedHours: !!savedData.hours,
-            }
-          );
+          const activeRoster = savedData.rosters.find(
+            (r) => r.id === savedData!.activeRosterId
+          ) ?? savedData.rosters[0];
 
-          // CRITICAL FIX: Use saved hours and fix constraint inconsistencies
-          const savedHours = savedData.hours || [];
+          const savedHours = activeRoster?.hours || [];
           const hoursToUse = savedHours.length > 0 ? savedHours : dynamicHours;
 
           // Fix user constraints to have consistent hourIDs matching saved hours
           const adjustedUserShiftData = (savedData.userShiftData || []).map(
             (userData) => {
-              // Fix constraint hourIDs to match saved hours structure
-              const updatedConstraints = (savedData.posts || []).map(
+              const updatedConstraints = (activeRoster?.posts || []).map(
                 (post, postIndex) => {
                   return hoursToUse.map((hour, hourIndex) => {
-                    // Try to preserve existing constraint availability, but fix the hourID
                     const existingConstraint =
                       userData.constraints?.[postIndex]?.[hourIndex];
                     return {
                       postID: post.id,
-                      hourID: hour.id, // Use correct hourID from saved hours
-                      availability: existingConstraint?.availability ?? true, // Preserve availability
+                      hourID: hour.id,
+                      availability: existingConstraint?.availability ?? true,
                     };
                   });
                 }
@@ -128,84 +99,68 @@ export function useShiftManagerInitialization() {
               return {
                 ...userData,
                 constraints: updatedConstraints,
+                constraintsByRoster: userData.constraintsByRoster || {
+                  [savedData!.activeRosterId]: updatedConstraints,
+                },
               };
-            }
-          );
-
-          console.log(
-            "🔄 [useShiftManagerInitialization] Loading saved state and fixing constraint IDs:",
-            {
-              savedHoursCount: savedHours.length,
-              dynamicHoursCount: dynamicHours.length,
-              usingSavedHours: savedHours.length > 0,
-              usersUpdated: adjustedUserShiftData.length,
-              preservingAssignments: true,
             }
           );
 
           setRecoilState((prev) => ({
             ...prev,
-            posts: savedData.posts || [],
-            hours: hoursToUse, // Use saved hours if available, otherwise dynamic
+            rosters: savedData!.rosters,
+            activeRosterId: savedData!.activeRosterId,
             userShiftData: adjustedUserShiftData,
-            assignments:
-              savedData.assignments ||
-              (savedData.posts || []).map(() => hoursToUse.map(() => null)),
             hasInitialized: true,
             syncStatus: "syncing",
-            manuallyEditedSlots: savedData.manuallyEditedSlots || {},
-            customCellDisplayNames: savedData.customCellDisplayNames || {},
-            // Backward compat: default to 24h if not present in saved data
-            scheduleMode: savedData.scheduleMode || "24h",
-            startDate: savedData.startDate || null,
-            cachedWeeklyState: savedData.cachedWeeklyState || null,
+            restTime: savedData!.restTime ?? 2,
+            optimizationSignature: savedData!.optimizationSignature ?? null,
           }));
-          // Set initial signature based on loaded data (preserve optimization state)
-          lastAppliedConstraintsSignature.current = JSON.stringify({
-            userShiftData: adjustedUserShiftData,
-            posts: savedData.posts || [],
-            hours: hoursToUse,
-          });
         } else {
           // 3. No saved data, so set default workers and initial assignments
+          const defaultRosterId = "default-roster";
+          const defaultRoster: RosterState = {
+            id: defaultRosterId,
+            name: "",
+            posts: defaultPosts,
+            hours: dynamicHours,
+            assignments: defaultPosts.map(() => dynamicHours.map(() => null)),
+            manuallyEditedSlots: {},
+            customCellDisplayNames: {},
+            scheduleMode: "24h",
+            startTime: "08:00",
+            endTime: "18:00",
+            startDate: null,
+            cachedWeeklyState: null,
+          };
+
           const defaultWorkers: UserShiftData[] = [
             {
-              user: { id: "worker-1", name: "ישראל מזרחי" },
+              user: { id: "worker-2", name: "עובד 2" },
               constraints: getDefaultConstraints(defaultPosts, dynamicHours),
+              constraintsByRoster: {
+                [defaultRosterId]: getDefaultConstraints(defaultPosts, dynamicHours),
+              },
               totalAssignments: 0,
             },
             {
-              user: { id: "worker-2", name: "ישראל אשכנזי" },
+              user: { id: "worker-1", name: "עובד 1" },
               constraints: getDefaultConstraints(defaultPosts, dynamicHours),
+              constraintsByRoster: {
+                [defaultRosterId]: getDefaultConstraints(defaultPosts, dynamicHours),
+              },
               totalAssignments: 0,
             },
           ];
-          const initialAssignments = recoilState.posts.map(() =>
-            dynamicHours.map(() => null)
-          );
+
           setRecoilState({
-            hours: dynamicHours,
-            posts: defaultPosts,
+            rosters: [defaultRoster],
+            activeRosterId: defaultRosterId,
             userShiftData: defaultWorkers,
             hasInitialized: true,
             syncStatus: "syncing",
-            assignments: initialAssignments,
-            manuallyEditedSlots: {},
-            customCellDisplayNames: {},
-            // Default shift settings
-            startTime: "08:00",
-            endTime: "18:00",
             restTime: 2,
-            // Schedule mode defaults
-            scheduleMode: "24h",
-            startDate: null,
-            cachedWeeklyState: null,
-          });
-          // Set initial signature for default state
-          lastAppliedConstraintsSignature.current = JSON.stringify({
-            userShiftData: defaultWorkers,
-            posts: defaultPosts,
-            hours: dynamicHours,
+            optimizationSignature: null,
           });
         }
       } catch (error) {
@@ -219,22 +174,30 @@ export function useShiftManagerInitialization() {
             OPERATION_START_TIME,
             OPERATION_END_TIME,
             defaultPosts.length,
-            DEFAULT_STAFF_COUNT,
+            2, // default bootstrap creates 2 workers
             MINIMUM_REST_TIME
           );
-          const errorAssignments = defaultPosts.map(() =>
-            fallbackHours.map(() => null)
-          );
+          const fallbackRoster: RosterState = {
+            id: "fallback-roster",
+            name: "",
+            posts: defaultPosts,
+            hours: fallbackHours,
+            assignments: defaultPosts.map(() => fallbackHours.map(() => null)),
+            manuallyEditedSlots: {},
+            customCellDisplayNames: {},
+            scheduleMode: "24h",
+            startTime: "08:00",
+            endTime: "18:00",
+            startDate: null,
+            cachedWeeklyState: null,
+          };
+
           setRecoilState((prev) => ({
             ...prev,
+            rosters: prev.rosters.length > 0 ? prev.rosters : [fallbackRoster],
+            activeRosterId: prev.activeRosterId || fallbackRoster.id,
             hasInitialized: true,
             syncStatus: "out-of-sync",
-            assignments:
-              prev.assignments && prev.assignments.length > 0
-                ? prev.assignments
-                : errorAssignments, // Keep existing or fallback
-            manuallyEditedSlots: prev.manuallyEditedSlots || {},
-            customCellDisplayNames: prev.customCellDisplayNames || {},
           }));
         }
       }
@@ -249,12 +212,7 @@ export function useShiftManagerInitialization() {
     };
   }, [
     recoilState.hasInitialized,
-    recoilState.posts,
-    recoilState.hours,
     setRecoilState,
   ]);
 
-  return {
-    lastAppliedConstraintsSignature,
-  };
 }

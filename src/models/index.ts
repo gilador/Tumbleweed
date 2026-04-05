@@ -18,8 +18,61 @@ export interface Constraint {
 export interface UserShiftData {
   user: User;
   constraints: Constraint[][];
+  constraintsByRoster?: Record<string, Constraint[][]>;
   assignments?: boolean[][];
   totalAssignments: number;
+}
+
+export interface RosterState {
+  id: string;
+  name: string;
+  posts: UniqueString[];
+  hours: UniqueString[];
+  assignments: (string | null)[][];
+  manuallyEditedSlots: {
+    [slotKey: string]: {
+      originalUserId: string | null;
+      currentUserId: string | null;
+    };
+  };
+  customCellDisplayNames: { [slotKey: string]: string };
+  scheduleMode: "24h" | "7d";
+  startTime: string;
+  endTime: string;
+  startDate: string | null;
+  cachedWeeklyState: {
+    hours: UniqueString[];
+    assignments: (string | null)[][];
+    userShiftData: UserShiftData[];
+    startDate: string;
+  } | null;
+}
+
+export const MAX_ROSTERS = 5;
+
+export function generateRosterId(): string {
+  return `roster-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+export function createEmptyRoster(name: string, id?: string): RosterState {
+  return {
+    id: id ?? generateRosterId(),
+    name,
+    posts: [],
+    hours: [],
+    assignments: [],
+    manuallyEditedSlots: {},
+    customCellDisplayNames: {},
+    scheduleMode: "24h",
+    startTime: "08:00",
+    endTime: "18:00",
+    startDate: null,
+    cachedWeeklyState: null,
+  };
+}
+
+export function getActiveRoster(rosters: RosterState[], activeRosterId: string): RosterState {
+  return rosters.find((r) => r.id === activeRosterId) ?? rosters[0];
 }
 
 export type OptimizeShiftSolution = {

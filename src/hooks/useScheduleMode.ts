@@ -1,19 +1,23 @@
 import { useRecoilState } from "recoil";
-import { shiftState } from "@/stores/shiftStore";
+import { shiftState, getActiveRosterFromState, updateActiveRoster } from "@/stores/shiftStore";
 import { UniqueString, UserShiftData } from "@/models";
 import { encodeFlatHour, parseFlatHour } from "@/service/weeklyScheduleUtils";
 import { getTodayISO } from "@/service/dayLabelUtils";
 
 export function useScheduleMode() {
   const [state, setState] = useRecoilState(shiftState);
+  const activeRoster = getActiveRosterFromState(state);
 
   const switchTo7D = () => {
     setState((prev) => {
+      const roster = getActiveRosterFromState(prev);
+      const activeRosterId = prev.activeRosterId;
+
       // If we have cached weekly state, restore it — but preserve current users
-      if (prev.cachedWeeklyState) {
-        const cachedHours = prev.cachedWeeklyState.hours;
+      if (roster.cachedWeeklyState) {
+        const cachedHours = roster.cachedWeeklyState.hours;
         const cachedUserMap = new Map(
-          prev.cachedWeeklyState.userShiftData.map((u) => [u.user.id, u])
+          roster.cachedWeeklyState.userShiftData.map((u) => [u.user.id, u])
         );
 
         // Merge: keep current users, restore cached constraints where possible
@@ -21,34 +25,48 @@ export function useScheduleMode() {
           (currentUser) => {
             const cachedUser = cachedUserMap.get(currentUser.user.id);
             if (cachedUser) {
-              // User existed in cache — restore their 7D constraints
-              return cachedUser;
+              return {
+                ...cachedUser,
+                constraintsByRoster: {
+                  ...currentUser.constraintsByRoster,
+                  [activeRosterId]: cachedUser.constraints,
+                },
+              };
             }
             // New user added while in 24H — create default 7D constraints
-            const weeklyConstraints = (prev.posts || []).map((post) =>
+            const weeklyConstraints = (roster.posts || []).map((post) =>
               cachedHours.map((hour) => ({
                 postID: post.id,
                 hourID: hour.id,
                 availability: true,
               }))
             );
-            return { ...currentUser, constraints: weeklyConstraints };
+            return {
+              ...currentUser,
+              constraints: weeklyConstraints,
+              constraintsByRoster: {
+                ...currentUser.constraintsByRoster,
+                [activeRosterId]: weeklyConstraints,
+              },
+            };
           }
         );
 
         return {
-          ...prev,
-          scheduleMode: "7d" as const,
-          hours: cachedHours,
-          assignments: (prev.posts || []).map(() => cachedHours.map(() => null)),
+          ...updateActiveRoster(prev, (r) => ({
+            ...r,
+            scheduleMode: "7d" as const,
+            hours: cachedHours,
+            assignments: (r.posts || []).map(() => cachedHours.map(() => null)),
+            startDate: r.cachedWeeklyState!.startDate,
+            cachedWeeklyState: null,
+          })),
           userShiftData: mergedUserShiftData,
-          startDate: prev.cachedWeeklyState.startDate,
-          cachedWeeklyState: null,
         };
       }
 
-      // Otherwise, duplicate current single-day state × 7
-      const singleDayHours = prev.hours;
+      // Otherwise, duplicate current single-day state x 7
+      const singleDayHours = roster.hours;
       const startDate = getTodayISO();
 
       // Build flat 7-day hours
@@ -62,10 +80,10 @@ export function useScheduleMode() {
         }
       }
 
-      // Duplicate constraints × 7 for each user
+      // Duplicate constraints x 7 for each user
       const weeklyUserShiftData: UserShiftData[] = prev.userShiftData.map(
         (userData) => {
-          const weeklyConstraints = (prev.posts || []).map(
+          const weeklyConstraints = (roster.posts || []).map(
             (post, postIndex) => {
               const singleDayPostConstraints =
                 userData.constraints[postIndex] || [];
@@ -85,35 +103,43 @@ export function useScheduleMode() {
           return {
             ...userData,
             constraints: weeklyConstraints,
+            constraintsByRoster: {
+              ...userData.constraintsByRoster,
+              [activeRosterId]: weeklyConstraints,
+            },
           };
         }
       );
 
       // Clear assignments for the new weekly structure
-      const weeklyAssignments = (prev.posts || []).map(() =>
+      const weeklyAssignments = (roster.posts || []).map(() =>
         weeklyHours.map(() => null)
       );
 
       return {
-        ...prev,
-        scheduleMode: "7d" as const,
-        startDate,
-        hours: weeklyHours,
+        ...updateActiveRoster(prev, (r) => ({
+          ...r,
+          scheduleMode: "7d" as const,
+          startDate,
+          hours: weeklyHours,
+          assignments: weeklyAssignments,
+          manuallyEditedSlots: {},
+          customCellDisplayNames: {},
+          cachedWeeklyState: null,
+        })),
         userShiftData: weeklyUserShiftData,
-        assignments: weeklyAssignments,
-        manuallyEditedSlots: {},
-        customCellDisplayNames: {},
-        cachedWeeklyState: null,
       };
     });
   };
 
   const switchTo24H = () => {
     setState((prev) => {
-      const shiftsPerDay = prev.hours.length / 7;
+      const roster = getActiveRosterFromState(prev);
+      const activeRosterId = prev.activeRosterId;
+      const shiftsPerDay = roster.hours.length / 7;
 
       // Extract day 0 hours (strip day prefix)
-      const day0Hours: UniqueString[] = prev.hours
+      const day0Hours: UniqueString[] = roster.hours
         .slice(0, shiftsPerDay)
         .map((h, i) => ({
           id: `hour-${i + 1}`,
@@ -123,7 +149,7 @@ export function useScheduleMode() {
       // Extract day 0 constraints for each user
       const day0UserShiftData: UserShiftData[] = prev.userShiftData.map(
         (userData) => {
-          const day0Constraints = (prev.posts || []).map(
+          const day0Constraints = (roster.posts || []).map(
             (_post, postIndex) => {
               return userData.constraints[postIndex]?.slice(0, shiftsPerDay).map(
                 (c, h) => ({
@@ -136,44 +162,52 @@ export function useScheduleMode() {
           return {
             ...userData,
             constraints: day0Constraints,
+            constraintsByRoster: {
+              ...userData.constraintsByRoster,
+              [activeRosterId]: day0Constraints,
+            },
           };
         }
       );
 
       // Clear assignments
-      const day0Assignments = (prev.posts || []).map(() =>
+      const day0Assignments = (roster.posts || []).map(() =>
         day0Hours.map(() => null)
       );
 
       return {
-        ...prev,
-        scheduleMode: "24h" as const,
-        hours: day0Hours,
+        ...updateActiveRoster(prev, (r) => ({
+          ...r,
+          scheduleMode: "24h" as const,
+          hours: day0Hours,
+          assignments: day0Assignments,
+          manuallyEditedSlots: {},
+          customCellDisplayNames: {},
+          // Cache the weekly state for potential restore
+          cachedWeeklyState: {
+            hours: r.hours,
+            assignments: r.assignments,
+            userShiftData: prev.userShiftData,
+            startDate: r.startDate || getTodayISO(),
+          },
+        })),
         userShiftData: day0UserShiftData,
-        assignments: day0Assignments,
-        manuallyEditedSlots: {},
-        customCellDisplayNames: {},
-        // Cache the weekly state for potential restore
-        cachedWeeklyState: {
-          hours: prev.hours,
-          assignments: prev.assignments,
-          userShiftData: prev.userShiftData,
-          startDate: prev.startDate || getTodayISO(),
-        },
       };
     });
   };
 
   const updateStartDate = (date: string) => {
-    setState((prev) => ({
-      ...prev,
-      startDate: date,
-    }));
+    setState((prev) =>
+      updateActiveRoster(prev, (r) => ({
+        ...r,
+        startDate: date,
+      }))
+    );
   };
 
   return {
-    scheduleMode: state.scheduleMode,
-    startDate: state.startDate,
+    scheduleMode: activeRoster.scheduleMode,
+    startDate: activeRoster.startDate,
     switchTo7D,
     switchTo24H,
     updateStartDate,

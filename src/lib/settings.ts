@@ -1,3 +1,5 @@
+import { notifyPreferencesChanged } from "./localStorageUtils";
+
 const SETTINGS_KEY = "tumbleweed-settings";
 
 interface AppSettings {
@@ -30,4 +32,5 @@ export function setSetting<K extends keyof AppSettings>(key: K, value: AppSettin
   const settings = load();
   settings[key] = value;
   save(settings);
+  notifyPreferencesChanged();
 }

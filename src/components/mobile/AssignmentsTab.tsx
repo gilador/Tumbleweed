@@ -7,7 +7,8 @@ import { IconClock, IconMapPin, IconTrash } from "@tabler/icons-react";
 import { FloatingActionButton } from "./FloatingActionButton";
 import { ReassignSheet } from "./ReassignSheet";
 import { ShareButton } from "../ShareButton";
-import { shiftState } from "../../stores/shiftStore";
+import { shiftState, getActiveRosterFromState } from "../../stores/shiftStore";
+import { RosterSwitcher } from "../RosterSwitcher";
 import { DayTabStrip } from "../DayTabStrip";
 import { getDaySlice, getDisplayTime } from "../../service/weeklyScheduleUtils";
 import { getTodayISO } from "../../service/dayLabelUtils";
@@ -58,7 +59,10 @@ export function AssignmentsTab({
   showInfo,
 }: AssignmentsTabProps) {
   const { t } = useTranslation();
-  const { scheduleMode, startDate } = useRecoilValue(shiftState);
+  const shiftStateValue = useRecoilValue(shiftState);
+  const activeRoster = getActiveRosterFromState(shiftStateValue);
+  const scheduleMode = activeRoster.scheduleMode;
+  const startDate = activeRoster.startDate;
   const [groupBy, setGroupBy] = useState<GroupBy>("time");
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [reassignTarget, setReassignTarget] = useState<ReassignTarget | null>(null);
@@ -154,6 +158,7 @@ export function AssignmentsTab({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h1 className="text-lg font-bold">{t("assignments")}</h1>
+          <RosterSwitcher />
           <span className="text-xs bg-gray-100 px-2 py-0.5 rounded font-medium">
             {scheduleMode === "7d" ? t("weeklyRoster") : t("singleDay")}
           </span>
@@ -176,7 +181,7 @@ export function AssignmentsTab({
           >
             <IconTrash size={18} className="text-muted-foreground" />
           </button>
-          <div className="flex rounded-md border border-black overflow-hidden">
+          <div className="flex rounded-md border border-border overflow-hidden">
             <button
               onClick={() => setGroupBy("time")}
               className={`flex items-center gap-1 px-3 py-1.5 text-xs min-h-[36px] ${
@@ -332,7 +337,7 @@ function TimeCard({
   const [expanded, setExpanded] = useState(defaultExpanded);
 
   return (
-    <div className={`rounded-lg border overflow-hidden ${isCurrent ? "border-primary border-2" : "border-black"}`}>
+    <div className={`rounded-lg border overflow-hidden ${isCurrent ? "border-primary border-2" : "border-border"}`}>
       <button
         onClick={() => setExpanded(!expanded)}
         className="flex items-center justify-between w-full px-4 py-3 min-h-[48px] bg-muted/30"
@@ -402,7 +407,7 @@ function PostCard({
   };
 
   return (
-    <div className="rounded-lg border border-black overflow-hidden">
+    <div className="rounded-lg border border-border overflow-hidden">
       <button
         onClick={() => setExpanded(!expanded)}
         className="flex items-center justify-between w-full px-4 py-3 min-h-[48px] bg-muted/30"

@@ -4,7 +4,8 @@ import { useRecoilValue } from "recoil";
 import { UserShiftData, Constraint } from "../../models";
 import { UniqueString } from "../../models/index";
 import { IconArrowLeft, IconCheck, IconX } from "@tabler/icons-react";
-import { shiftState } from "../../stores/shiftStore";
+import { shiftState, getActiveRosterFromState } from "../../stores/shiftStore";
+import { RosterSwitcher } from "../RosterSwitcher";
 import { DayTabStrip, DayIndicator } from "../DayTabStrip";
 import { AvailabilityCopyBar } from "../AvailabilityCopyBar";
 import { getDaySlice, getDisplayTime } from "../../service/weeklyScheduleUtils";
@@ -28,7 +29,10 @@ export function StaffAvailability({
   onUpdateConstraints,
 }: StaffAvailabilityProps) {
   const { t } = useTranslation();
-  const { scheduleMode, startDate } = useRecoilValue(shiftState);
+  const shiftStateValue = useRecoilValue(shiftState);
+  const activeRoster = getActiveRosterFromState(shiftStateValue);
+  const scheduleMode = activeRoster.scheduleMode;
+  const startDate = activeRoster.startDate;
   const [selectedDay, setSelectedDay] = useState(0);
   const isWeekly = scheduleMode === "7d";
   const daySlice = isWeekly ? getDaySlice(hours.length, selectedDay) : { start: 0, end: hours.length };
@@ -140,7 +144,7 @@ export function StaffAvailability({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-black flex-none">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-border flex-none">
         <button
           onClick={onBack}
           className="p-2 -ms-2 rounded-md hover:bg-accent min-h-[44px] min-w-[44px] flex items-center justify-center"
@@ -148,6 +152,8 @@ export function StaffAvailability({
           <IconArrowLeft size={20} className="icon-flip" />
         </button>
         <h1 className="text-lg font-bold">{userData.user.name}</h1>
+        <div className="flex-1" />
+        <RosterSwitcher />
       </div>
 
       {/* Day tabs for weekly mode */}
@@ -171,14 +177,14 @@ export function StaffAvailability({
       <div className="flex gap-2 px-4 py-3 flex-none">
         <button
           onClick={() => setAll(true)}
-          className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-black text-sm min-h-[44px] hover:bg-accent"
+          className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-border text-sm min-h-[44px] hover:bg-accent"
         >
           <IconCheck size={16} className="text-green-600" />
           {t("allAvailable")}
         </button>
         <button
           onClick={() => setAll(false)}
-          className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-black text-sm min-h-[44px] hover:bg-accent"
+          className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-border text-sm min-h-[44px] hover:bg-accent"
         >
           <IconX size={16} className="text-red-500" />
           {t("allUnavailable")}
@@ -194,7 +200,7 @@ export function StaffAvailability({
           const allAvailable = availableCount === dayConstraints.length;
 
           return (
-            <div key={post.id} className="rounded-lg border border-black overflow-hidden">
+            <div key={post.id} className="rounded-lg border border-border overflow-hidden">
               {/* Post header — tap to toggle all */}
               <button
                 onClick={() => togglePost(postIndex)}

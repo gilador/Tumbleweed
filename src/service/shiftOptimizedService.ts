@@ -1,4 +1,4 @@
-import { UserShiftData } from "@/models";
+import { UserShiftData, RosterState } from "@/models";
 import { trackEvent } from "@/lib/analytics";
 
 export interface OptimizedShiftResult {
@@ -599,4 +599,49 @@ export async function optimizeShift(
       isOptim: false,
     };
   }
+}
+
+// --- Multi-roster optimization ---
+
+export interface RosterInput {
+  rosterId: string;
+  userData: UserShiftData[];
+  posts: RosterState["posts"];
+  hours: RosterState["hours"];
+}
+
+export interface MultiRosterResult {
+  results: Map<string, OptimizedShiftResult>;
+  allOptimal: boolean;
+}
+
+export async function optimizeAllRosters(
+  inputs: RosterInput[]
+): Promise<MultiRosterResult> {
+  const results = new Map<string, OptimizedShiftResult>();
+  let allOptimal = true;
+
+  for (const input of inputs) {
+    if (input.userData.length === 0 || input.posts.length === 0 || input.hours.length === 0) {
+      // Skip rosters with no data
+      continue;
+    }
+
+    const result = await optimizeShift(input.userData);
+    results.set(input.rosterId, result);
+
+    if (!result.isOptim) {
+      allOptimal = false;
+    }
+  }
+
+  trackEvent("optimizer-run-multi", {
+    staffCount: inputs[0]?.userData.length || 0,
+    constraintCount: inputs.reduce(
+      (sum, i) => sum + i.posts.length * i.hours.length,
+      0
+    ),
+  });
+
+  return { results, allOptimal };
 }

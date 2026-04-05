@@ -4,6 +4,7 @@ import { getSetting } from "./settings";
 type CoreEventMap = {
   "schedule-created": { postCount: number };
   "optimizer-run": { staffCount: number; constraintCount: number };
+  "optimizer-run-multi": { staffCount: number; constraintCount: number };
   "schedule-published": { filledSlots: number; totalSlots: number };
   "staff-invited": { count: number };
   "availability-received": { dayCount: number };

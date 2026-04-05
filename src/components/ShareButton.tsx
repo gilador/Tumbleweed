@@ -5,7 +5,7 @@ import { IconShare, IconPrinter, IconCopy, IconBrandWhatsapp } from "@tabler/ico
 import html2canvas from "html2canvas";
 import type { UniqueString, UserShiftData } from "../models";
 import { generateTextSummary } from "../service/textSummary";
-import { shiftState } from "../stores/shiftStore";
+import { shiftState, getActiveRosterFromState } from "../stores/shiftStore";
 
 interface ShareButtonProps {
   posts: UniqueString[];
@@ -16,6 +16,7 @@ interface ShareButtonProps {
   customCellDisplayNames: { [slotKey: string]: string };
   groupBy: "time" | "post";
   onCopied?: () => void;
+  disabled?: boolean;
 }
 
 // Only use native share on mobile — on desktop the native sheet is limited (no print/save PDF)
@@ -31,9 +32,13 @@ export function ShareButton({
   customCellDisplayNames,
   groupBy,
   onCopied,
+  disabled,
 }: ShareButtonProps) {
   const { t, i18n } = useTranslation();
-  const { scheduleMode, startDate } = useRecoilValue(shiftState);
+  const state = useRecoilValue(shiftState);
+  const activeRoster = getActiveRosterFromState(state);
+  const scheduleMode = activeRoster.scheduleMode;
+  const startDate = activeRoster.startDate;
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -149,7 +154,8 @@ export function ShareButton({
     return (
       <button
         onClick={handleNativeShare}
-        className="h-8 w-8 rounded-md hover:bg-accent flex items-center justify-center"
+        disabled={disabled}
+        className="h-8 w-8 rounded-md hover:bg-accent flex items-center justify-center disabled:opacity-30 disabled:pointer-events-none"
         title={t("shareSchedule")}
       >
         <IconShare size={16} className="text-muted-foreground" />
@@ -161,7 +167,8 @@ export function ShareButton({
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setDropdownOpen(!dropdownOpen)}
-        className="h-8 w-8 rounded-md hover:bg-accent flex items-center justify-center"
+        disabled={disabled}
+        className="h-8 w-8 rounded-md hover:bg-accent flex items-center justify-center disabled:opacity-30 disabled:pointer-events-none"
         title={t("shareSchedule")}
       >
         <IconShare size={16} className="text-muted-foreground" />

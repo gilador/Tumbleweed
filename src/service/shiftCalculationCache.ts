@@ -114,21 +114,33 @@ export function getDistinguishedIntensities(
     }
   }
 
-  // Create distinguished intensities: only keep the HIGHEST intensity from each duration group
-  // This ensures maximum rest time for workers while maintaining distinct duration steps
+  // Create distinguished intensities: keep one representative per duration group.
+  // If all intensities produce the same duration, show min, mid, and max
+  // so the user can still control rest time even when it doesn't change shifts.
   const distinguishedIntensities: number[] = [];
 
-  Object.entries(durationGroups)
-    .sort(([a], [b]) => parseFloat(a) - parseFloat(b)) // Sort by duration
-    .forEach(([durationKey, intensitiesForDuration]) => {
-      // Take the highest intensity (most rest) from this duration group
+  const allGroups = Object.entries(durationGroups)
+    .sort(([a], [b]) => parseFloat(a) - parseFloat(b));
+
+  if (allGroups.length === 1 && allGroups[0][1].length > 1) {
+    // All intensities produce the same duration — show a spread
+    const all = allGroups[0][1].sort((a, b) => a - b);
+    const min = all[0];
+    const max = all[all.length - 1];
+    const mid = all[Math.floor(all.length / 2)];
+    const spread = new Set([min, mid, max]);
+    spread.forEach((v) => distinguishedIntensities.push(v));
+    distinguishedIntensities.sort((a, b) => a - b);
+  } else {
+    allGroups.forEach(([, intensitiesForDuration]) => {
       const maxIntensity = Math.max(...intensitiesForDuration);
       distinguishedIntensities.push(maxIntensity);
+    });
+  }
 
+  allGroups.forEach(([durationKey, intensitiesForDuration]) => {
       console.log(
-        `🎯 [shiftCalculationCache] Duration ${durationKey}h: chose intensity ${maxIntensity}h from [${intensitiesForDuration.join(
-          ", "
-        )}]`
+        `🎯 [shiftCalculationCache] Duration ${durationKey}h: intensities [${intensitiesForDuration.join(", ")}]`
       );
     });
 

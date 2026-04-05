@@ -2,7 +2,7 @@
   "name": "tumbleweed-web",
   "homepage": "https://gor84.com/tumbleweed",
   "private": true,
-  "version": "2.4.5",
+  "version": "2.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
