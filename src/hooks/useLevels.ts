@@ -4,6 +4,31 @@ import { shiftState, getActiveRosterFromState, updateActiveRoster } from "../sto
 import { computeLevels, ShiftLevel } from "../service/shiftLevels";
 import { generateDynamicHours } from "../service/shiftManagerUtils";
 
+/**
+ * Determines whether the auto-apply effect should regenerate hours and clear assignments.
+ * Exported for testing.
+ */
+/**
+ * Determines whether the auto-apply effect should regenerate hours and clear assignments.
+ * Exported for testing.
+ */
+export function shouldAutoApplyLevel(
+  selectedLevel: ShiftLevel | null,
+  posts: number,
+  staff: number,
+  currentHourCount: number,
+  optimizationSignature: string | null,
+  scheduleMode: string
+): boolean {
+  if (!selectedLevel || posts === 0 || staff === 0) return false;
+  // In 7D mode, hours are managed by useScheduleMode (7x single-day hours).
+  // useLevels only generates single-day hours, so skip to avoid overwriting.
+  if (scheduleMode === "7d") return false;
+  if (currentHourCount === selectedLevel.shifts) return false;
+  if (optimizationSignature) return false;
+  return true;
+}
+
 export interface UseLevelsResult {
   /** All computed levels (feasible and infeasible) */
   levels: ShiftLevel[];
@@ -61,13 +86,9 @@ export function useLevels(): UseLevelsResult {
   // - Posts/staff changed making the old shift count infeasible
   // - Old restTime-based state being migrated
   useEffect(() => {
-    if (!selectedLevel || posts === 0 || staff === 0) return;
-
     const currentHourCount = activeRoster.hours?.length || 0;
-    const expectedHourCount = selectedLevel.shifts;
-
-    // Only auto-apply if the hour count doesn't match the selected level
-    if (currentHourCount === expectedHourCount) return;
+    const scheduleMode = activeRoster.scheduleMode || "24h";
+    if (!shouldAutoApplyLevel(selectedLevel, posts, staff, currentHourCount, recoilStateValue.optimizationSignature, scheduleMode)) return;
 
     const newHours = generateDynamicHours(startTime, endTime, posts, staff, selectedLevel.shifts);
 
@@ -102,7 +123,7 @@ export function useLevels(): UseLevelsResult {
         optimizationSignature: null,
       };
     });
-  }, [selectedLevel?.shifts, posts, staff, startTime, endTime]);
+  }, [selectedLevel?.shifts, posts, staff, startTime, endTime, recoilStateValue.optimizationSignature]);
 
   const setLevel = useCallback(
     (shiftCount: number) => {
