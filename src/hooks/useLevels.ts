@@ -88,9 +88,9 @@ export function useLevels(): UseLevelsResult {
   useEffect(() => {
     const currentHourCount = activeRoster.hours?.length || 0;
     const scheduleMode = activeRoster.scheduleMode || "24h";
-    if (!shouldAutoApplyLevel(selectedLevel, posts, staff, currentHourCount, recoilStateValue.optimizationSignature, scheduleMode)) return;
+    if (!shouldAutoApplyLevel(selectedLevel, posts, staff, currentHourCount, recoilStateValue.optimizationSignature ?? null, scheduleMode)) return;
 
-    const newHours = generateDynamicHours(startTime, endTime, posts, staff, selectedLevel.shifts);
+    const newHours = generateDynamicHours(startTime, endTime, posts, staff, selectedLevel!.shifts);
 
     setRecoilState((prev) => {
       const roster = getActiveRosterFromState(prev);
@@ -118,7 +118,7 @@ export function useLevels(): UseLevelsResult {
           hours: newHours,
           assignments: clearedAssignments,
         })),
-        selectedShiftCount: selectedLevel.shifts,
+        selectedShiftCount: selectedLevel!.shifts,
         userShiftData: updatedUserShiftData,
         optimizationSignature: null,
       };
