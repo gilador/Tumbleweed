@@ -16,7 +16,7 @@ import { TermsOfServiceDialog } from "./components/TermsOfServiceDialog";
 import { useIsMobile } from "./hooks/useIsMobile";
 import { useDrivePersistence } from "./hooks/useDrivePersistence";
 import { DriveConflictDialog } from "./components/DriveConflictDialog";
-import { AuthProvider, useAuth } from "./lib/auth";
+import { AuthProvider, useAuth, isGoogleAuthAvailable } from "./lib/auth";
 import {
   Dialog,
   DialogContent,
@@ -94,7 +94,7 @@ function DriveConnectPrompt({ cloudSyncStatus, forceShow, onForceShowHandled, is
 
   // Force show overrides dismiss
   const shouldShow = forceShow || (reason && !dismissed);
-  if (!shouldShow || !reason) return null;
+  if (!isGoogleAuthAvailable || !shouldShow || !reason) return null;
 
   const handleDismiss = () => {
     setDismissed(true);

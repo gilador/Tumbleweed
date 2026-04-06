@@ -5,14 +5,14 @@ import { shiftState, getActiveRosterFromState, updateRosterById } from "../store
 import { optimizeAllRosters, RosterInput } from "../service/shiftOptimizedService";
 import { UserShiftData } from "../models";
 
-function buildSignature(state: { userShiftData: UserShiftData[]; posts: any[]; hours: any[]; startTime: string; endTime: string; restTime: number }): string {
+function buildSignature(state: { userShiftData: UserShiftData[]; posts: any[]; hours: any[]; startTime: string; endTime: string; selectedShiftCount: number | null }): string {
   return JSON.stringify({
     userShiftData: state.userShiftData,
     posts: state.posts,
     hours: state.hours,
     startTime: state.startTime,
     endTime: state.endTime,
-    restTime: state.restTime,
+    selectedShiftCount: state.selectedShiftCount,
   });
 }
 
@@ -95,7 +95,7 @@ export function useShiftOptimization(
       hours: activeRoster.hours,
       startTime: activeRoster.startTime,
       endTime: activeRoster.endTime,
-      restTime: recoilState.restTime,
+      selectedShiftCount: recoilState.selectedShiftCount,
     });
 
     if (currentSignature === savedSignature) {
@@ -121,7 +121,7 @@ export function useShiftOptimization(
     activeRoster.hours,
     activeRoster.startTime,
     activeRoster.endTime,
-    recoilState.restTime,
+    recoilState.selectedShiftCount,
     t,
     setRecoilState,
   ]);
@@ -176,7 +176,7 @@ export function useShiftOptimization(
         hours: activeRoster.hours,
         startTime: activeRoster.startTime,
         endTime: activeRoster.endTime,
-        restTime: recoilState.restTime,
+        selectedShiftCount: recoilState.selectedShiftCount,
       });
 
       // Apply results to all rosters
@@ -224,9 +224,14 @@ export function useShiftOptimization(
           }));
         }
 
-        // Persist optimization signature and mark as synced
-        newState.syncStatus = "synced";
-        newState.optimizationSignature = signature;
+        // Persist optimization signature only when all rosters optimized successfully
+        if (allOptimal) {
+          newState.syncStatus = "synced";
+          newState.optimizationSignature = signature;
+        } else {
+          newState.syncStatus = "no-optimised";
+          newState.optimizationSignature = null;
+        }
         return newState;
       });
 

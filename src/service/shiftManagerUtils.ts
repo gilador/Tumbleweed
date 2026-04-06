@@ -1,44 +1,60 @@
-import { calculateMinimumShifts } from "./shiftHourHelperService";
-import { Constraint, ShiftMap, UserShiftData } from "../models";
+import { Constraint } from "../models";
 import { UniqueString } from "../models/index";
 import { defaultHours } from "../constants/shiftManagerConstants";
+import { computeLevels } from "./shiftLevels";
 
-// Generate dynamic hours based on shift calculation
+/**
+ * Generate dynamic hours based on a selected shift level.
+ * Uses computeLevels to find the level, then generates evenly-spaced time slots.
+ */
 export function generateDynamicHours(
   startTime: string,
   endTime: string,
   postCount: number,
   staffCount: number,
-  minimumRestTime: number = 0
+  selectedShiftCount: number | null
 ): UniqueString[] {
-  const result = calculateMinimumShifts({
-    startTime,
-    endTime,
-    postCount,
-    staffCount,
-    minimumTotalRestTime: minimumRestTime,
-  });
+  const [sh, sm] = startTime.split(":").map(Number);
+  const [eh, em] = endTime.split(":").map(Number);
+  let opMinutes = (eh * 60 + em) - (sh * 60 + sm);
+  if (opMinutes <= 0) opMinutes += 24 * 60;
+  const opHours = opMinutes / 60;
 
-  if (!result.isFeasible || result.shiftStartTimes.length === 0) {
-    // Fallback to hardcoded hours if calculation fails
-    console.warn(
-      "generateDynamicHours: Shift calculation failed, using fallback hours"
-    );
-    console.warn("generateDynamicHours: Fallback hours:", defaultHours);
+  const levels = computeLevels(opHours, postCount, staffCount);
+
+  // Find the selected level, or pick the middle feasible one
+  let level = selectedShiftCount !== null
+    ? levels.find((l) => l.shifts === selectedShiftCount)
+    : null;
+
+  if (!level) {
+    const feasible = levels.filter((l) => l.feasible);
+    level = feasible.length > 0
+      ? feasible[Math.floor(feasible.length / 2)]
+      : levels[0];
+  }
+
+  if (!level || level.shifts === 0) {
+    console.warn("generateDynamicHours: No valid level, using fallback hours");
     return defaultHours;
   }
-  console.log(
-    "generateDynamicHours: Shift calculation success. result:",
-    result
-  );
 
-  // Convert calculated shift times to UniqueString format
-  const dynamicHours = result.shiftStartTimes.map((time, index) => ({
-    id: `hour-${index + 1}`,
-    value: time,
-  }));
+  // Generate evenly-spaced shift start times
+  const durationMinutes = Math.round(level.duration * 60);
+  const dynamicHours: UniqueString[] = [];
 
-  console.log("generateDynamicHours: Generated dynamic hours:", dynamicHours);
+  for (let i = 0; i < level.shifts; i++) {
+    const totalMinutes = sh * 60 + sm + i * durationMinutes;
+    const hours = Math.floor(totalMinutes / 60) % 24;
+    const minutes = totalMinutes % 60;
+    const time = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+    dynamicHours.push({
+      id: `hour-${i + 1}`,
+      value: time,
+    });
+  }
+
+  console.log("generateDynamicHours: Generated", dynamicHours.length, "hours for", level.shifts, "shifts of", level.duration, "h");
   return dynamicHours;
 }
 
@@ -46,49 +62,11 @@ export function getDefaultConstraints(
   posts: UniqueString[],
   hours: UniqueString[]
 ): Constraint[][] {
-  // First level represents posts (changed from hours-first to posts-first)
   return posts.map((post) => {
-    // For each post, create constraints for all hours
     return hours.map((hour) => ({
       postID: post.id,
       hourID: hour.id,
       availability: true,
     }));
   });
-}
-
-export function deriveUserDataMap(
-  users: UserShiftData[] | undefined,
-  defaultConstraints: Constraint[][],
-  oldMap: ShiftMap
-): ShiftMap {
-  const newMap = new ShiftMap();
-  users?.forEach((userShiftData) => {
-    const existingShiftData = oldMap.getUser(userShiftData.user.id);
-    let newUserConstraints = JSON.parse(JSON.stringify(defaultConstraints));
-
-    newUserConstraints.forEach((postConstraints: Constraint[]) => {
-      postConstraints.forEach((hourConstraint) => {
-        const id =
-          userShiftData.user.id + hourConstraint.postID + hourConstraint.hourID;
-        const oldShift = oldMap.getShift(id);
-        hourConstraint.availability =
-          (oldShift && oldShift.availability) ?? hourConstraint.availability;
-      });
-    });
-
-    const totalAssignments = existingShiftData
-      ? existingShiftData.totalAssignments
-      : 0;
-
-    const updatedUserData = {
-      user: userShiftData.user,
-      constraints: newUserConstraints,
-      totalAssignments,
-    };
-
-    newMap.addUser(updatedUserData);
-  });
-
-  return newMap;
 }

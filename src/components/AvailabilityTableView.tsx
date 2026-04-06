@@ -690,8 +690,8 @@ export function AvailabilityTableView({
                         >
                           <div className="w-4 h-4 flex items-center justify-center">
                             {isAvailable ? (
-                              <div className="w-4 h-4 bg-foreground rounded-full flex items-center justify-center">
-                                <IconCheck className="w-3 h-3 text-background" stroke={3} />
+                              <div className="w-4 h-4 bg-[#32353a] rounded-full flex items-center justify-center">
+                                <IconCheck className="w-3 h-3 text-white" stroke={3} />
                               </div>
                             ) : (
                               <div className="w-4 h-4 bg-background rounded-full flex items-center justify-center">

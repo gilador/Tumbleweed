@@ -16,8 +16,9 @@ export interface PersistedShiftData {
   activeRosterId: string;
   userShiftData: UserShiftData[];
   hasInitialized: boolean;
-  restTime: number;
-  zeroRest?: boolean;
+  restTime?: number; // legacy, migrated to selectedShiftCount
+  zeroRest?: boolean; // legacy, removed
+  selectedShiftCount: number | null;
   // Snapshot of inputs used for the last successful optimization.
   // If current inputs match this, the schedule is considered optimized.
   optimizationSignature?: string | null;
@@ -66,7 +67,7 @@ export const initialLoadState: ShiftState = {
   userShiftData: [],
   hasInitialized: false,
   syncStatus: "idle",
-  restTime: 2,
+  selectedShiftCount: null,
   optimizationSignature: null,
 };
 
@@ -128,7 +129,7 @@ export function migrateLegacyState(legacy: LegacyPersistedShiftData): PersistedS
     activeRosterId: rosterId,
     userShiftData: migratedUsers,
     hasInitialized: legacy.hasInitialized,
-    restTime: legacy.restTime ?? 2,
+    selectedShiftCount: null,
   };
 }
 

@@ -10,7 +10,7 @@ import {
 import { LAST_LOCAL_SAVE_KEY, LAST_CLOUD_SAVE_KEY, DRIVE_ROSTER_CHECKSUM_KEY, computeChecksum } from "../lib/localStorageUtils";
 import { shiftState } from "../stores/shiftStore";
 import { CloudSyncContext, TriggerSyncContext, ShowDrivePromptContext } from "../App";
-import { useAuth } from "../lib/auth";
+import { useAuth, isGoogleAuthAvailable } from "../lib/auth";
 import { useIsMobile } from "../hooks/useIsMobile";
 
 // Keep the type export for backward compat (shiftStore imports it)
@@ -231,7 +231,7 @@ function DesktopSyncIcon({ size, sync, animating }: {
     <Tooltip>
       <TooltipTrigger asChild>
         <button
-          onClick={() => (!isAuthenticated || sync === "drive-error") ? showDrivePrompt?.() : triggerSync?.()}
+          onClick={() => (isGoogleAuthAvailable && (!isAuthenticated || sync === "drive-error")) ? showDrivePrompt?.() : triggerSync?.()}
           className="cursor-pointer"
           disabled={animating}
         >
@@ -240,7 +240,7 @@ function DesktopSyncIcon({ size, sync, animating }: {
       </TooltipTrigger>
       <TooltipContent>
         <SyncTimestamps />
-        {(!isAuthenticated || sync === "drive-error") && (
+        {isGoogleAuthAvailable && (!isAuthenticated || sync === "drive-error") && (
           <p className="text-xs text-primary mt-1">{t("drivePromptConnect")}</p>
         )}
       </TooltipContent>
@@ -288,7 +288,7 @@ function MobileSyncPopover({ size, sync, animating }: {
         <div className="absolute end-0 top-full mt-1 z-50 rounded-md border bg-popover px-3 py-2 text-popover-foreground shadow-md whitespace-nowrap space-y-2">
           <SyncTimestamps />
           <div className="flex items-center gap-2 text-xs font-medium">
-            {isAuthenticated ? (
+            {(isAuthenticated || !isGoogleAuthAvailable) ? (
               <button
                 onClick={handleSync}
                 disabled={animating}

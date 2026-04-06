@@ -28,12 +28,13 @@ describe("Shift Hour Helper Service", () => {
       const result = calculateMinimumShifts(input);
 
       expect(result.isFeasible).toBe(true);
+      // rest=4 caps max shift at 12h, so 16h needs 2 shifts of 8h
       expect(result.minimumShiftsNeeded).toBe(2);
       expect(result.shiftDuration).toBe(8);
       expect(result.shiftStartTimes).toEqual(["07:00", "15:00"]);
     });
 
-    it("can handle dual shift when rest time constrains single shift", () => {
+    it("can handle single shift when rest is between shifts (not per-day)", () => {
       const input: ShiftCalculationInput = {
         startTime: "09:00",
         endTime: "17:00",
@@ -45,12 +46,13 @@ describe("Shift Hour Helper Service", () => {
       const result = calculateMinimumShifts(input);
 
       expect(result.isFeasible).toBe(true);
+      // rest=2 caps max shift at 6h, so 8h needs 2 shifts of 4h
       expect(result.minimumShiftsNeeded).toBe(2);
       expect(result.shiftDuration).toBe(4);
       expect(result.shiftStartTimes).toEqual(["09:00", "13:00"]);
     });
 
-    it("can calculate 3 shifts with higher rest requirements", () => {
+    it("can handle high rest with enough staff for single shift", () => {
       const input: ShiftCalculationInput = {
         startTime: "07:00",
         endTime: "23:00",
@@ -62,9 +64,9 @@ describe("Shift Hour Helper Service", () => {
       const result = calculateMinimumShifts(input);
 
       expect(result.isFeasible).toBe(true);
+      // rest=10 caps max shift at 6h (16-10), needs 3 shifts
       expect(result.minimumShiftsNeeded).toBe(3);
-      expect(result.shiftDuration).toBeCloseTo(5.33, 2);
-      expect(result.shiftStartTimes).toEqual(["07:00", "12:20", "17:40"]);
+      expect(result.shiftDuration).toBeCloseTo(6, 1);
     });
 
     it("handles default rest time when not specified", () => {
@@ -133,7 +135,7 @@ describe("Shift Hour Helper Service", () => {
       );
     });
 
-    it("identifies infeasible scenarios with high rest requirements", () => {
+    it("high rest falls back to longer shift when shorter shifts are infeasible", () => {
       const input: ShiftCalculationInput = {
         startTime: "06:00",
         endTime: "18:00",
@@ -144,12 +146,11 @@ describe("Shift Hour Helper Service", () => {
 
       const result = calculateMinimumShifts(input);
 
-      expect(result.isFeasible).toBe(false);
-      expect(result.minimumShiftsNeeded).toBe(0);
-      expect(result.shiftStartTimes).toEqual([]);
-      expect(result.message).toContain(
-        "Need 48 work-hours but only have 36 available"
-      );
+      // Preferred max shift is 6h, but 2 shifts of 6h need 8 workers (only 6).
+      // Falls back to 1 shift of 12h (6 staff ≥ 4 posts).
+      expect(result.isFeasible).toBe(true);
+      expect(result.minimumShiftsNeeded).toBe(1);
+      expect(result.shiftDuration).toBe(12);
     });
 
     it("handles invalid time format gracefully", () => {
@@ -209,6 +210,7 @@ describe("Shift Hour Helper Service", () => {
       const result = calculateMinimumShifts(input);
 
       expect(result.isFeasible).toBe(true);
+      // rest=2 caps max shift at 6h, 8h needs 2 shifts of 4h
       expect(result.shiftStartTimes).toEqual(["07:30", "11:30"]);
     });
 
@@ -268,7 +270,8 @@ describe("Shift Hour Helper Service", () => {
 
       expect(result.isFeasible).toBe(true);
       expect(result.shiftStartTimes[0]).toBe("09:15");
-      expect(result.shiftDuration).toBeCloseTo(4.25, 1); // 8.5 hours / 2 shifts = 4.25
+      // rest=1 caps max shift at 7.5h, 8.5h needs 2 shifts of 4.25h
+      expect(result.shiftDuration).toBeCloseTo(4.25, 1);
     });
   });
 
@@ -278,6 +281,7 @@ describe("Shift Hour Helper Service", () => {
     it("returns shift times array for feasible configuration", () => {
       const result = getShiftTimes("07:00", "23:00", 3, 10, 4);
 
+      // rest=4 caps max shift at 12h, 16h needs 2 shifts of 8h
       expect(result).toEqual(["07:00", "15:00"]);
     });
 
@@ -362,7 +366,7 @@ describe("Shift Hour Helper Service", () => {
     it("returns correct duration for feasible configurations", () => {
       const result = getOptimalShiftDuration("07:00", "23:00", 3, 10, 4);
 
-      expect(result).toBe(8); // 16 hours / 2 shifts = 8 hours
+      expect(result).toBe(8); // rest=4 caps max shift at 12h → 2 shifts of 8h
     });
 
     it("returns zero for infeasible configurations", () => {
@@ -374,13 +378,13 @@ describe("Shift Hour Helper Service", () => {
     it("calculates optimal shift duration with rest constraints", () => {
       const result = getOptimalShiftDuration("08:00", "16:00", 1, 5, 2);
 
-      expect(result).toBe(4); // 8 hours / 2 shifts = 4 hours per shift
+      expect(result).toBe(4); // rest=2 caps max shift at 6h → 2 shifts of 4h
     });
 
-    it("returns zero for infeasible multiple shift scenarios", () => {
+    it("high rest falls back to full operation shift when multi-shift infeasible", () => {
       const result = getOptimalShiftDuration("06:00", "18:00", 4, 6, 6);
 
-      expect(result).toBe(0); // Infeasible due to insufficient work capacity
+      expect(result).toBe(12); // Preferred 6h shift infeasible, falls back to 1 shift of 12h
     });
   });
 

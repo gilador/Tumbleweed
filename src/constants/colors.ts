@@ -16,13 +16,13 @@ export const colors = {
   },
   // Selected user cells
   selected: {
-    default: "bg-foreground text-background",
-    hover: "hover:bg-foreground/80",
+    default: "bg-[#32353a] text-white",
+    hover: "hover:bg-[#32353a]/80",
   },
   // Cell colors
   cell: {
     default: "bg-muted",
-    selected: "bg-foreground text-background",
+    selected: "bg-[#32353a] text-white",
     dim: "bg-muted/30",
     error: "bg-red-600 text-white",
   },

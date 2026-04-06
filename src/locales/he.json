@@ -3,6 +3,7 @@
 
   "shiftManager": "ניהול משמרת",
   "roster": "סידור",
+  "addRoster": "הוסף סידור",
   "defaultPost": "עמדה {{n}}",
   "defaultMember": "עובד {{n}}",
 
@@ -82,7 +83,7 @@
 
   "userAvailability": "הזמינות של {{name}}",
   "emptyStateTitle": "קצת ריק פה...",
-  "pickStaffMember": "בחר איש צוות כדי לצפות בזמינות שלו.",
+  "pickStaffMember": "בחר איש צוות כדי לצפות בזמינות שלו",
   "cannotMakeUnavailable": "לא ניתן להפוך משתמש זה ללא זמין - לפחות משתמש אחד חייב להיות זמין בכל משבצת זמן כדי לאפשר אופטימיזציה.",
   "availabilityResetToAllAvailable": "הזמינות אופסה לזמין בהכל",
   "availabilitySetToAllUnavailable": "הזמינות הוגדרה ללא זמין בהכל",
@@ -237,7 +238,7 @@
   "overCapacity": "הנדרש חורג מהקיבולת — הוסיפו עובדים או צמצמו עמדות/שעות",
   "hintAddStaff": "הוסיפו אנשי צוות כדי להתחיל",
   "hintAddPosts": "הוסיפו עמדות כדי להגדיר תפקידים",
-  "hintOverCapacity": "קיבולת הצוות ({{capacity}} שעות) קטנה מדי ביחס לנדרש ({{needed}} שעות)",
+  "hintOverCapacity": "אין מספיק צוות: {{capacity}} משבצות זמינות מתוך {{needed}} נדרשות",
   "hintRunOptimizer": "לחצו על כפתור האופטימיזציה ליצירת שיבוצים",
   "hintNotOptimized": "הסידור השתנה — הפעילו אופטימיזציה מחדש",
   "hintOptimized": "הסידור מיטבי ומעודכן",
