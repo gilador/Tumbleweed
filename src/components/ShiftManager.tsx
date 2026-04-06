@@ -45,55 +45,28 @@ import { LanguageSwitcher } from "./LanguageSwitcher";
 import { getSetting, setSetting } from "../lib/settings";
 import { enableDebugMode, disableDebugMode } from "../lib/analytics";
 import { ThemeSwitcher } from "./ThemeSwitcher";
+import { getActionHint } from "../service/actionHint";
+import { useLevels } from "../hooks/useLevels";
 
-function ActionHint({ posts, staff, restTime, startTime, endTime, hasAssignments, isOptimized, shiftsCount, shiftDuration }: {
-  posts: number;
-  staff: number;
-  restTime: number;
-  startTime: string;
-  endTime: string;
+function ActionHint({ hasAssignments, isOptimized }: {
   hasAssignments: boolean;
   isOptimized: boolean;
-  shiftsCount: number;
-  shiftDuration: number;
 }) {
   const { t } = useTranslation();
+  const [recoilStateForHint] = useRecoilState(shiftState);
+  const { opHours, staff, posts } = useLevels();
 
-  // Calculate capacity
-  const [sh] = startTime.split(":").map(Number);
-  const [eh] = endTime.split(":").map(Number);
-  let opHours = eh - sh;
-  if (opHours <= 0) opHours += 24;
-  const maxWork = Math.max(0, opHours - Math.min(restTime, opHours * 0.8));
-  const capacity = staff * maxWork;
-  const needed = shiftsCount * posts * (isNaN(shiftDuration) ? 0 : shiftDuration);
+  const { hint, variant } = getActionHint({
+    posts, staff, opHours, hasAssignments, isOptimized,
+    selectedShiftCount: recoilStateForHint.selectedShiftCount,
+  });
 
   let message = "";
-  let variant: "info" | "warning" | "success" = "info";
-
-  if (staff === 0) {
-    message = t("hintAddStaff");
-  } else if (posts === 0) {
-    message = t("hintAddPosts");
-  } else if (needed > capacity && capacity > 0) {
-    message = t("hintOverCapacity", {
-      capacity: capacity.toFixed(0),
-      needed: needed.toFixed(0),
-    });
-    variant = "warning";
-  } else if (shiftsCount === 0 || shiftDuration === 0 || isNaN(shiftDuration)) {
-    message = t("hintOverCapacity", {
-      capacity: capacity.toFixed(0),
-      needed: (opHours * posts).toFixed(0),
-    });
-    variant = "warning";
-  } else if (!hasAssignments && staff > 0 && posts > 0) {
-    message = t("hintRunOptimizer");
-  } else if (hasAssignments && !isOptimized) {
-    message = t("hintNotOptimized");
-  } else if (isOptimized) {
-    message = t("hintOptimized");
-    variant = "success";
+  if (hint === null) return null;
+  if (hint.key === "hintOverCapacity") {
+    message = t(hint.key, { capacity: hint.capacity, needed: hint.needed });
+  } else {
+    message = t(hint.key);
   }
 
   if (!message) return null;
@@ -190,6 +163,16 @@ export function ShiftManager() {
   const handleCloseShiftSettings = () => {
     setShowShiftSettings(false);
   };
+
+  // Close shift settings on Esc key
+  useEffect(() => {
+    if (!showShiftSettings) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") handleCloseShiftSettings();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [showShiftSettings]);
 
   // Enhanced addPost with toast notification
   const handleAddPost = () => {
@@ -391,15 +374,8 @@ export function ShiftManager() {
                   onCheckAll={handlePostCheckAll}
                 />
                 <ActionHint
-                  posts={activeRoster.posts?.length || 0}
-                  staff={recoilState.userShiftData?.length || 0}
-                  restTime={recoilState.restTime || 2}
-                  startTime={activeRoster.startTime || "08:00"}
-                  endTime={activeRoster.endTime || "18:00"}
                   hasAssignments={assignments.some((post) => post.some((u) => u !== null))}
                   isOptimized={!!recoilState.optimizationSignature}
-                  shiftsCount={scheduleInfo.shiftsCount}
-                  shiftDuration={scheduleInfo.shiftDuration}
                 />
               </div>
               <div className="flex-1 border-primary-rounded-lg overflow-hidden relative">
@@ -480,7 +456,7 @@ export function ShiftManager() {
                   style={{ paddingTop: "0.5rem" }}
                 >
                   <div
-                    className="w-[40rem] max-w-[calc(100%-4rem)] max-h-[calc(100%-1rem)] overflow-hidden rounded-lg border-2 border-foreground bg-background/90 backdrop-blur-md shadow-xl"
+                    className="w-[40rem] max-w-[calc(100%-4rem)] max-h-[calc(100%-1rem)] overflow-auto rounded-lg border-2 border-foreground bg-background/90 backdrop-blur-md shadow-xl"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="flex justify-between items-center px-2 pt-1 pb-1 sticky top-0 bg-background/90 backdrop-blur-md z-10">
@@ -495,7 +471,6 @@ export function ShiftManager() {
                       </button>
                     </div>
                     <ShiftInfoSettingsView
-                      restTime={recoilState.restTime ?? 2}
                       startHour={activeRoster.startTime ?? "08:00"}
                       endHour={activeRoster.endTime ?? "16:00"}
                       posts={activeRoster.posts || []}

@@ -3,6 +3,7 @@
 
   "shiftManager": "Shift Manager",
   "roster": "roster",
+  "addRoster": "Add roster",
   "defaultPost": "Post {{n}}",
   "defaultMember": "Member {{n}}",
 
@@ -237,7 +238,7 @@
   "overCapacity": "Needed exceeds capacity — add more staff or reduce posts/hours",
   "hintAddStaff": "Add staff members to get started",
   "hintAddPosts": "Add posts to define positions",
-  "hintOverCapacity": "Staff capacity ({{capacity}}h) too small compared to needed ({{needed}}h)",
+  "hintOverCapacity": "Not enough staff: {{capacity}} slots available but {{needed}} needed",
   "hintRunOptimizer": "Click the optimize button to generate assignments",
   "hintNotOptimized": "Schedule changed — re-run optimizer for best results",
   "hintOptimized": "Schedule is optimized and up to date",

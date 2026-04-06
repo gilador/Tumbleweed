@@ -354,38 +354,20 @@ function validateWorkCapacity(
     minimumTotalRestTime,
   });
 
-  // The logic here was wrong! minimumTotalRestTime is the minimum rest time per worker,
-  // not the total rest across all workers. Each worker should be able to work most of
-  // the operation time, with some reasonable breaks.
-
-  // A more reasonable approach: assume workers can work up to (operationTime - minimumRestPerWorker)
-  // where minimumRestPerWorker is a reasonable fraction of minimumTotalRestTime
-  const reasonableRestPerWorker = Math.min(
-    minimumTotalRestTime,
-    operationTime * 0.8
-  ); // Cap at 80% of operation time
-  const maxWorkTimePerPerson = operationTime - reasonableRestPerWorker;
-  const totalWorkCapacity = staffCount * maxWorkTimePerPerson;
-  const totalWorkNeeded = operationTime * postCount;
-
-  console.log("📊 [validateWorkCapacity] Calculations:", {
-    reasonableRestPerWorker,
-    maxWorkTimePerPerson,
-    totalWorkCapacity,
-    totalWorkNeeded,
-    isFeasible: totalWorkCapacity >= totalWorkNeeded,
-  });
-
-  if (totalWorkCapacity < totalWorkNeeded) {
-    const message = `Need ${totalWorkNeeded} work-hours but only have ${totalWorkCapacity} available (${maxWorkTimePerPerson}h per person * ${staffCount} staff)`;
+  // This is a pre-check before we know the shift duration.
+  // We defer to findMinimumShifts for the actual feasibility check,
+  // which tries every possible shift duration. Here we only reject
+  // configurations that are clearly impossible:
+  // - Not enough staff to cover all posts even in a single shift
+  //   (you need at least postCount workers for 1 shift)
+  // - Zero staff or zero operation time
+  if (staffCount <= 0 || operationTime <= 0) {
+    const message = `Invalid configuration: ${staffCount} staff, ${operationTime}h operation`;
     console.warn("❌ [validateWorkCapacity] Failed:", message);
-    return {
-      isFeasible: false,
-      message,
-    };
+    return { isFeasible: false, message };
   }
 
-  console.log("✅ [validateWorkCapacity] Passed");
+  console.log("✅ [validateWorkCapacity] Passed (defers to findMinimumShifts for detailed check)");
   return { isFeasible: true };
 }
 
@@ -403,23 +385,26 @@ function findMinimumShifts(
     minimumTotalRestTime,
   });
 
-  // Apply the same reasonable rest logic here
+  // Rest is between consecutive shifts, not subtracted from total work time.
   const reasonableRestPerWorker = Math.min(
     minimumTotalRestTime,
     operationTime * 0.8
   );
-  const maxWorkTimePerPerson = operationTime - reasonableRestPerWorker;
 
   console.log("findMinimumShifts: Work capacity:", {
     reasonableRestPerWorker,
-    maxWorkTimePerPerson,
   });
 
-  // Define allowed shift durations (in hours): multiples of 0.25 up to operation time
-  const allowedDurations: number[] = [];
   const baseIncrement = 0.25;
 
-  // Generate allowed durations: 0.25, 0.5, 0.75, 1, 1.25, 1.5, ..., up to operation time
+  // Preferred max shift duration based on rest: workers work up to (opTime - rest) per shift.
+  // Higher rest → shorter preferred shifts → more shifts needed.
+  // Zero rest → workers can work the full operation → 1 long shift.
+  const preferredMaxShift = operationTime - reasonableRestPerWorker;
+
+  // Allow all durations up to operationTime; scoring will prefer shorter ones when rest > 0
+  const allowedDurations: number[] = [];
+
   for (
     let duration = baseIncrement;
     duration <= operationTime;
@@ -445,7 +430,11 @@ function findMinimumShifts(
     const shiftsNeeded = Math.ceil(exactShifts);
 
     // Check if this configuration is feasible
-    const maxShiftsPerPerson = Math.floor(maxWorkTimePerPerson / shiftDuration);
+    // Rest is between shifts: N shifts need N×duration + (N-1)×rest hours
+    // maxShifts = floor((operationTime + rest) / (duration + rest)) when duration ≤ operationTime
+    const maxShiftsPerPerson = shiftDuration <= operationTime
+      ? Math.floor((operationTime + reasonableRestPerWorker) / (shiftDuration + reasonableRestPerWorker))
+      : 0;
     const availableAssignments = staffCount * maxShiftsPerPerson;
     const requiredAssignments = shiftsNeeded * postCount;
 
@@ -467,13 +456,23 @@ function findMinimumShifts(
       const remainder = exactShifts - Math.floor(exactShifts);
       const isExactDivision = remainder < 0.001; // Account for floating point precision
 
-      // Score: exact divisions get priority, then fewer shifts, then longer durations
+      // Scoring: prefer shift durations at or below preferredMaxShift.
+      // - Higher rest → lower preferredMaxShift → shorter shifts → more shifts
+      // - Lower rest → higher preferredMaxShift → longer shifts → fewer shifts
+      // - Zero rest → preferredMaxShift = operationTime → 1 shift of full day
       let score = 0;
       if (isExactDivision) {
         score += 1000; // High priority for exact divisions
       }
-      score += 100 - shiftsNeeded; // Prefer fewer shifts
-      score += shiftDuration; // Prefer longer durations as tiebreaker
+      // Strong preference for durations within the preferred max
+      if (shiftDuration <= preferredMaxShift) {
+        score += 2000;
+        // Within range: prefer longest (fewest shifts that respect rest)
+        score += shiftDuration;
+      } else {
+        // Over preferred max: heavy penalty, prefer shortest oversize
+        score += operationTime - shiftDuration;
+      }
 
       console.log(
         `findMinimumShifts: Duration ${shiftDuration}h score: ${score} (exact: ${isExactDivision}, remainder: ${remainder.toFixed(

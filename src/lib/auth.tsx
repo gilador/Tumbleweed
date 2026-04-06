@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef, ty
 import { setGoogleAccessToken, clearGoogleAccessToken, hasGoogleDriveAccess } from "./googleDrive";
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "";
+export const isGoogleAuthAvailable = !!GOOGLE_CLIENT_ID;
 const SCOPES = "openid email profile https://www.googleapis.com/auth/drive.file";
 const ACCESS_TOKEN_KEY = "tumbleweed_google_access_token";
 const USER_PROFILE_KEY = "tumbleweed_google_user";
@@ -156,7 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithGoogle = useCallback(() => {
     if (!GOOGLE_CLIENT_ID) {
-      console.error("VITE_GOOGLE_CLIENT_ID is not configured");
+      console.warn("VITE_GOOGLE_CLIENT_ID is not configured — Google sign-in unavailable");
       return;
     }
     if (!gisReadyRef.current || !tokenClientRef.current) {

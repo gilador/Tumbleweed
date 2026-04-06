@@ -113,7 +113,7 @@ export function useShiftManagerInitialization() {
             userShiftData: adjustedUserShiftData,
             hasInitialized: true,
             syncStatus: "syncing",
-            restTime: savedData!.restTime ?? 2,
+            selectedShiftCount: savedData!.selectedShiftCount ?? null,
             optimizationSignature: savedData!.optimizationSignature ?? null,
           }));
         } else {
@@ -159,7 +159,7 @@ export function useShiftManagerInitialization() {
             userShiftData: defaultWorkers,
             hasInitialized: true,
             syncStatus: "syncing",
-            restTime: 2,
+            selectedShiftCount: null,
             optimizationSignature: null,
           });
         }

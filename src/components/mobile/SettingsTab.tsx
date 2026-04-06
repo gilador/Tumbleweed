@@ -1,18 +1,18 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { useRecoilState, useRecoilValue } from "recoil";
-import { shiftState, getActiveRosterFromState, updateActiveRoster, shiftScheduleInfoSelector } from "../../stores/shiftStore";
+import { useRecoilState } from "recoil";
+import { shiftState, getActiveRosterFromState, updateActiveRoster } from "../../stores/shiftStore";
 import { UniqueString } from "../../models/index";
 import { UserShiftData } from "../../models";
 import { RosterSwitcher } from "../RosterSwitcher";
 import { SyncStatusIcon } from "../SyncStatusIcon";
 import { TimeInput } from "../TimeInput";
 import { IconPlus, IconTrash, IconPencil, IconCheck, IconX, IconUser, IconLogin, IconLogout, IconBrandGithub, IconSettings } from "@tabler/icons-react";
-import { getOptimalShiftDuration } from "../../service/shiftHourHelperService";
-import { calculateFeasibleIntensityRange } from "../../service/intensityRangeHelper";
+import { useLevels } from "../../hooks/useLevels";
 import { useAuth } from "../../lib/auth";
 import { LanguageSwitcher } from "../LanguageSwitcher";
 import { getSetting, setSetting } from "../../lib/settings";
+// computeCapacity removed — using useLevels instead
 import { enableDebugMode, disableDebugMode } from "../../lib/analytics";
 import { ThemeSwitcher } from "../ThemeSwitcher";
 import {
@@ -33,7 +33,7 @@ interface SettingsTabProps {
   hours: UniqueString[];
   startTime: string;
   endTime: string;
-  restTime: number;
+  restTime?: number; // legacy, unused
   userShiftData: UserShiftData[];
   onAddPost: () => void;
   onRemovePost: (postId: string) => void;
@@ -49,7 +49,7 @@ export function SettingsTab({
   posts,
   startTime,
   endTime,
-  restTime,
+  restTime: _restTime,
   userShiftData,
   onAddPost,
   onRemovePost,
@@ -69,48 +69,14 @@ export function SettingsTab({
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const staffCount = recoilState.userShiftData?.length || userShiftData.length;
-  const scheduleInfo = useRecoilValue(shiftScheduleInfoSelector);
+  // scheduleInfo removed — using levels for shift info
   const { scheduleMode, startDate, switchTo7D, switchTo24H, updateStartDate } = useScheduleMode();
 
-  const [intensityOptions, setIntensityOptions] = useState([1, 2, 4, 6, 8]);
-  const [intensityDurationMap, setIntensityDurationMap] = useState<Record<number, number>>({});
-
-  useEffect(() => {
-    const result = calculateFeasibleIntensityRange(startTime, endTime, posts.length, staffCount);
-    setIntensityOptions(result.feasibleIntensities);
-    const durationAt0 = getOptimalShiftDuration(startTime, endTime, posts.length, staffCount, 0);
-    setIntensityDurationMap({ ...result.intensityDurationMap, 0: durationAt0 > 0 ? durationAt0 : 0 });
-  }, [startTime, endTime, posts.length, staffCount]);
-
-  const zeroRest = !!recoilState.zeroRest;
-  const effectiveOptions = zeroRest && !intensityOptions.includes(0)
-    ? [0, ...intensityOptions]
-    : intensityOptions;
-
-  const getSliderIndex = (intensity: number) => {
-    const opts = effectiveOptions;
-    const index = opts.indexOf(intensity);
-    if (index === -1) {
-      const closestIndex = opts.reduce((closest, option, i) => {
-        return Math.abs(option - intensity) < Math.abs(opts[closest] - intensity) ? i : closest;
-      }, 0);
-      return opts.length - 1 - closestIndex;
-    }
-    return opts.length - 1 - index;
-  };
-
-  const getIntensityFromIndex = (index: number) => {
-    const opts = effectiveOptions;
-    const invertedIndex = opts.length - 1 - index;
-    return opts[invertedIndex];
-  };
-
+  const { levels, selectedLevel, setLevel: setLevelHook } = useLevels();
 
   const updateShiftStateWithNewHours = useCallback(
-    (newStartTime: string, newEndTime: string, newIntensity: number) => {
-      const newDuration = getOptimalShiftDuration(
-        newStartTime, newEndTime, posts.length, staffCount, newIntensity
-      );
+    (newStartTime: string, newEndTime: string, _newIntensity: number) => {
+      const newDuration = selectedLevel?.duration ?? 0;
 
       // Calculate shift starting times
       const [startH, startM] = newStartTime.split(":").map(Number);
@@ -182,7 +148,7 @@ export function SettingsTab({
             hours: newHours,
             assignments,
           })),
-          restTime: newIntensity,
+          selectedShiftCount: recoilState.selectedShiftCount,
           userShiftData: updatedUserShiftData,
         };
       });
@@ -296,7 +262,7 @@ export function SettingsTab({
             <label className="text-xs text-muted-foreground block mb-1">{t("start")}</label>
             <TimeInput
               value={startTime}
-              onChange={(time) => updateShiftStateWithNewHours(time, endTime, restTime)}
+              onChange={(time) => updateShiftStateWithNewHours(time, endTime, 0)}
             />
           </div>
           <span className="text-muted-foreground mt-5 icon-flip">→</span>
@@ -304,7 +270,7 @@ export function SettingsTab({
             <label className="text-xs text-muted-foreground block mb-1">{t("end")}</label>
             <TimeInput
               value={endTime}
-              onChange={(time) => updateShiftStateWithNewHours(startTime, time, restTime)}
+              onChange={(time) => updateShiftStateWithNewHours(startTime, time, 0)}
             />
           </div>
         </div>
@@ -434,37 +400,27 @@ export function SettingsTab({
         </button>
       </div>
 
-      {/* Intensity */}
+      {/* Intensity (Level Slider) */}
       <div className="rounded-lg border border-border p-4 space-y-3">
         <h2 className="text-sm font-semibold">{t("shiftIntensity")}</h2>
         {(() => {
-          const durations = new Set(effectiveOptions.map((o) => (intensityDurationMap[o] ?? 0).toFixed(2)));
-          const allSame = durations.size <= 1 && effectiveOptions.length > 1;
+          const feasibleLevels = levels.filter((l) => l.feasible);
+          const selectedIdx = selectedLevel ? levels.indexOf(selectedLevel) : -1;
 
-          const zeroRestCheckbox = (
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={!!recoilState.zeroRest}
-                onChange={(e) => {
-                  setShiftData((prev) => ({ ...prev, zeroRest: e.target.checked }));
-                  if (e.target.checked) {
-                    updateShiftStateWithNewHours(startTime, endTime, 0);
-                  } else if (restTime === 0) {
-                    updateShiftStateWithNewHours(startTime, endTime, intensityOptions[0] || 1);
-                  }
-                }}
-                className="h-3.5 w-3.5 rounded border-border"
-              />
-              <span className="text-xs text-muted-foreground">{t("zeroRest")}</span>
-            </label>
-          );
+          if (levels.length === 0) {
+            return <p className="text-xs text-muted-foreground text-center">{t("noFeasibleSchedule")}</p>;
+          }
 
-          if (allSame) {
+          if (levels.length === 1 && feasibleLevels.length <= 1) {
             return (
-              <div className="space-y-2">
-                <p className="text-xs text-muted-foreground">{t("intensityFixed")}</p>
-                {zeroRestCheckbox}
+              <div className="flex flex-col items-center gap-2 py-2">
+                <div className={`w-4 h-4 rounded-full ${feasibleLevels.length === 1 ? "bg-primary" : "bg-muted-foreground/30"}`} />
+                <span className="text-sm font-medium">{levels[0].shifts}×{levels[0].duration.toFixed(1)}h</span>
+                {feasibleLevels.length === 0 && levels[0].staffGap && (
+                  <span className="text-xs text-red-500">
+                    {t("needMoreStaff", { count: levels[0].staffGap, defaultValue: `Need ${levels[0].staffGap} more staff` })}
+                  </span>
+                )}
               </div>
             );
           }
@@ -472,106 +428,76 @@ export function SettingsTab({
           return (
             <div className="space-y-2">
               <div className="flex items-center gap-3">
-                <span className="text-xs text-muted-foreground whitespace-nowrap">{t("relaxed")}</span>
+                <span className="text-xs text-muted-foreground whitespace-nowrap">{t("intense", { defaultValue: "Few" })}</span>
                 <div className="flex-1 flex items-center relative h-6">
-                  <div className="absolute inset-x-[10px] h-2 bg-border rounded-lg flex items-center justify-between">
-                    {effectiveOptions.map((opt: number, i: number) => {
-                      const [sH] = startTime.split(":").map(Number);
-                      const [eH] = endTime.split(":").map(Number);
-                      let opH = eH - sH;
-                      if (opH <= 0) opH += 24;
-                      const maxW = Math.max(0, opH - Math.min(opt, opH * 0.8));
-                      const cap = staffCount * maxW;
-                      const dur = intensityDurationMap[opt] ?? 0;
-                      const shifts = dur > 0 ? Math.floor(opH / dur) : 0;
-                      const need = shifts * posts.length * dur;
-                      const overCap = need > cap && cap > 0;
+                  <div className="absolute inset-x-[10px] h-0.5 bg-border rounded-full" />
+                  <div className="relative w-full flex items-center justify-between">
+                    {levels.map((level, i) => {
+                      const tooltipText = !level.feasible && level.staffGap
+                        ? `${level.shifts}×${level.duration.toFixed(1)}h — ${t("needMoreStaffOrLessPosts", {
+                            staffGap: level.staffGap,
+                            postGap: level.postGap,
+                            defaultValue: `Need ${level.staffGap} more staff or ${level.postGap} fewer posts`,
+                          })}`
+                        : "";
                       return (
-                        <div
-                          key={i}
-                          className={`w-2 h-2 rounded-full ${overCap ? "bg-red-500" : "bg-muted-foreground/40"}`}
-                        />
+                      <div key={i} className="relative group flex items-center justify-center w-5 h-5">
+                      <button
+                        type="button"
+                        className={`rounded-full transition-all ${
+                          level.feasible
+                            ? i === selectedIdx
+                              ? "w-5 h-5 bg-primary shadow-sm"
+                              : "w-2.5 h-2.5 bg-muted-foreground/60 hover:bg-muted-foreground"
+                            : "w-2.5 h-2.5 bg-muted-foreground/20 cursor-default"
+                        }`}
+                        onClick={() => {
+                          if (level.feasible) {
+                            setLevelHook(level.shifts);
+                            updateShiftStateWithNewHours(startTime, endTime, 0);
+                          }
+                        }}
+                        disabled={!level.feasible}
+                      />
+                      {tooltipText && (
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-foreground text-background text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 pointer-events-none z-20">
+                          {tooltipText}
+                        </div>
+                      )}
+                      </div>
                       );
                     })}
                   </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max={Math.max(effectiveOptions.length - 1, 1)}
-                    step="1"
-                    value={getSliderIndex(restTime)}
-                    onChange={(e) => {
-                      const newIntensity = getIntensityFromIndex(parseInt(e.target.value));
-                      updateShiftStateWithNewHours(startTime, endTime, newIntensity);
-                    }}
-                    className="relative z-10 w-full h-2 bg-transparent rounded-lg appearance-none cursor-pointer
-                      [&::-webkit-slider-thumb]:appearance-none
-                      [&::-webkit-slider-thumb]:h-5
-                      [&::-webkit-slider-thumb]:w-5
-                      [&::-webkit-slider-thumb]:rounded-full
-                      [&::-webkit-slider-thumb]:bg-primary
-                      [&::-webkit-slider-thumb]:cursor-pointer
-                      [&::-moz-range-thumb]:h-5
-                      [&::-moz-range-thumb]:w-5
-                      [&::-moz-range-thumb]:rounded-full
-                      [&::-moz-range-thumb]:bg-primary
-                      [&::-moz-range-thumb]:cursor-pointer
-                      [&::-moz-range-thumb]:border-none"
-                  />
                 </div>
-                <span className="text-xs text-muted-foreground whitespace-nowrap">{t("intense")}</span>
+                <span className="text-xs text-muted-foreground whitespace-nowrap">{t("relaxed", { defaultValue: "Many" })}</span>
               </div>
-              {zeroRestCheckbox}
             </div>
           );
         })()}
-        <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
-          <span>{t("shiftsCount", { count: scheduleInfo.shiftsCount })}</span>
-          <span>·</span>
-          <span>{t("durationEach", { duration: scheduleInfo.shiftDuration.toFixed(1) })}</span>
-        </div>
+        {selectedLevel && (
+          <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
+            <span>{t("shiftsLabel", { defaultValue: "Shifts" })}: <span className="font-medium text-foreground">{selectedLevel.shifts}</span></span>
+            <span>{t("minRest", { defaultValue: "Min. rest" })}: <span className="font-medium text-foreground">{selectedLevel.restBetween.toFixed(1)}h</span></span>
+            <span>{t("duration")}: <span className="font-medium text-primary">{selectedLevel.duration.toFixed(2)}h</span></span>
+          </div>
+        )}
       </div>
 
       {/* How it works */}
-      <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
-        {(() => {
-          const [sh] = startTime.split(":").map(Number);
-          const [eh] = endTime.split(":").map(Number);
-          let opHours = eh - sh;
-          if (opHours <= 0) opHours += 24;
-          const maxWorkPerPerson = Math.max(0, opHours - Math.min(restTime, opHours * 0.8));
-          const totalCapacity = staffCount * maxWorkPerPerson;
-          const totalNeeded = scheduleInfo.shiftsCount * posts.length * scheduleInfo.shiftDuration;
-          const params = {
-            posts: posts.length,
-            staff: staffCount,
-            shifts: scheduleInfo.shiftsCount,
-            duration: scheduleInfo.shiftDuration.toFixed(1),
-            opHours,
-            rest: restTime,
-            start: startTime,
-            end: endTime,
-            maxWork: maxWorkPerPerson.toFixed(1),
-            totalCapacity: totalCapacity.toFixed(0),
-            totalNeeded: totalNeeded.toFixed(0),
-          };
-          const overCapacity = totalNeeded > totalCapacity && totalCapacity > 0;
-          return (
-            <div className="text-xs text-foreground space-y-1">
-              <p>
-                <span className="font-semibold">{t("howItWorks")}:</span>{" "}
-                {scheduleMode === "7d"
-                  ? t("howItWorksDetail7d", params)
-                  : t("howItWorksDetail", params)}
-              </p>
-              <p className={overCapacity ? "text-red-500 font-medium" : "text-muted-foreground"}>
-                {t("constraintsDetail", params)}
-                {overCapacity && ` ⚠ ${t("overCapacity")}`}
-              </p>
-            </div>
-          );
-        })()}
-      </div>
+      {selectedLevel && (
+        <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
+          <div className="text-xs text-foreground space-y-1">
+            <p>
+              <span className="font-semibold">{t("howItWorks")}:</span>{" "}
+              {selectedLevel.shifts}×{selectedLevel.duration.toFixed(1)}h {t("shifts").toLowerCase()} · {posts.length} {t("posts").toLowerCase()} · {staffCount} {t("staff").toLowerCase()}
+            </p>
+            <p className="text-muted-foreground">
+              {t("eachWorker", { defaultValue: "Each worker" })}: {selectedLevel.shiftsPerWorker} {t("shifts").toLowerCase()}, {selectedLevel.workHours.toFixed(1)}h {t("work", { defaultValue: "work" })}
+              {selectedLevel.restBetween > 0 && ` · ${selectedLevel.restBetween.toFixed(1)}h ${t("rest").toLowerCase()} ${t("betweenShifts", { defaultValue: "between shifts" })}`}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Pro tip */}
       <p className="text-xs text-muted-foreground/60 text-center">
