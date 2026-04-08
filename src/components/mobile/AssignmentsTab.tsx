@@ -12,6 +12,7 @@ import { RosterSwitcher } from "../RosterSwitcher";
 import { DayTabStrip } from "../DayTabStrip";
 import { getDaySlice, getDisplayTime } from "../../service/weeklyScheduleUtils";
 import { getTodayISO } from "../../service/dayLabelUtils";
+import { WeeklyRosterGrid } from "../WeeklyRosterGrid";
 import {
   Dialog,
   DialogContent,
@@ -64,6 +65,7 @@ export function AssignmentsTab({
   const scheduleMode = activeRoster.scheduleMode;
   const startDate = activeRoster.startDate;
   const [groupBy, setGroupBy] = useState<GroupBy>("time");
+  const [weeklyView, setWeeklyView] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [reassignTarget, setReassignTarget] = useState<ReassignTarget | null>(null);
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
@@ -154,7 +156,7 @@ export function AssignmentsTab({
 
   return (
     <div className="px-4 py-4 space-y-4 pb-24">
-      {/* Header with grouping toggle and clear */}
+      {/* Header with actions and grouping toggle */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h1 className="text-lg font-bold">{t("assignments")}</h1>
@@ -181,7 +183,31 @@ export function AssignmentsTab({
           >
             <IconTrash size={18} className="text-muted-foreground" />
           </button>
+        </div>
+      </div>
+      <div className="flex justify-between items-center">
+        {isWeekly && (
           <div className="flex rounded-md border border-border overflow-hidden">
+            <button
+              onClick={() => setWeeklyView(false)}
+              className={`px-2.5 py-1.5 text-xs min-h-[36px] font-medium ${
+                !weeklyView ? "bg-primary text-primary-foreground" : "hover:bg-accent"
+              }`}
+            >
+              {t("dailyView")}
+            </button>
+            <button
+              onClick={() => setWeeklyView(true)}
+              className={`px-2.5 py-1.5 text-xs min-h-[36px] font-medium ${
+                weeklyView ? "bg-primary text-primary-foreground" : "hover:bg-accent"
+              }`}
+            >
+              {t("weeklyView")}
+            </button>
+          </div>
+        )}
+        {!weeklyView && (
+          <div className="flex rounded-md border border-border overflow-hidden ms-auto">
             <button
               onClick={() => setGroupBy("time")}
               className={`flex items-center gap-1 px-3 py-1.5 text-xs min-h-[36px] ${
@@ -201,9 +227,26 @@ export function AssignmentsTab({
               {t("post")}
             </button>
           </div>
-        </div>
+        )}
       </div>
 
+      {/* Weekly roster grid (mobile read-only) */}
+      {weeklyView && isWeekly ? (
+        <WeeklyRosterGrid
+          posts={posts}
+          hours={hours}
+          assignments={assignments}
+          userShiftData={userShiftData}
+          endTime={endTime}
+          customCellDisplayNames={customCellDisplayNames}
+          startDate={startDate}
+          onDayDrillDown={(dayIndex) => {
+            setSelectedDay(dayIndex);
+            setWeeklyView(false);
+          }}
+        />
+      ) : (
+      <>
       {/* Day tabs for weekly mode */}
       {isWeekly && (
         <DayTabStrip
@@ -258,6 +301,8 @@ export function AssignmentsTab({
             />
           ))}
         </div>
+      )}
+      </>
       )}
 
       {/* FAB */}

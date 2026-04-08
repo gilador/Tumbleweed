@@ -47,6 +47,7 @@ import { enableDebugMode, disableDebugMode } from "../lib/analytics";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 import { getActionHint } from "../service/actionHint";
 import { useLevels } from "../hooks/useLevels";
+import { WeeklyRosterGrid } from "./WeeklyRosterGrid";
 
 function ActionHint({ hasAssignments, isOptimized }: {
   hasAssignments: boolean;
@@ -113,6 +114,7 @@ export function ShiftManager() {
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
+  const [weeklyView, setWeeklyView] = useState(false);
 
   // Initialize the component
   useShiftManagerInitialization();
@@ -152,7 +154,7 @@ export function ShiftManager() {
   } = usePostHandlers();
 
   // Use assignment handlers
-  const { handleAssignmentNameUpdate, handleClearAllAssignments } =
+  const { handleAssignmentChange, handleAssignmentNameUpdate, handleClearAllAssignments } =
     useAssignmentHandlers();
 
   // Handle shift settings toggle
@@ -366,6 +368,26 @@ export function ShiftManager() {
                     {t("shiftDurationLabel", { duration: (isNaN(scheduleInfo.shiftDuration) ? 0 : scheduleInfo.shiftDuration).toFixed(1) })}
                   </span>
                 </div>
+                {activeRoster.scheduleMode === "7d" && (
+                  <div className="flex rounded-md border border-border overflow-hidden ms-2">
+                    <button
+                      onClick={() => setWeeklyView(false)}
+                      className={`px-2.5 py-1 text-xs font-medium transition-colors ${
+                        !weeklyView ? "bg-primary text-primary-foreground" : "hover:bg-accent"
+                      }`}
+                    >
+                      {t("dailyView")}
+                    </button>
+                    <button
+                      onClick={() => setWeeklyView(true)}
+                      className={`px-2.5 py-1 text-xs font-medium transition-colors ${
+                        weeklyView ? "bg-primary text-primary-foreground" : "hover:bg-accent"
+                      }`}
+                    >
+                      {t("weeklyView")}
+                    </button>
+                  </div>
+                )}
                 <PostListActions
                   isEditing={isEditing}
                   onAddPost={handleAddPost}
@@ -388,41 +410,54 @@ export function ShiftManager() {
                     {t("clearAssignments")}
                   </button>
                 )}
-                {/* AvailabilityTableView - positioned at top left */}
+                {/* Assignment view - either weekly grid or daily table */}
                 <div className="absolute top-0 start-0 w-full h-full">
-                  <AvailabilityTableView
-                    key={`assignments-${
-                      recoilState.userShiftData
-                        ?.map((u) => u.user.name)
-                        .join("-") || "no-users"
-                    }-${
-                      activeRoster.posts?.map((p) => p.id).join("-") ||
-                      "no-posts"
-                    }`}
-                    className="h-full"
-                    posts={activeRoster.posts}
-                    hours={activeRoster.hours || defaultHours}
-                    endTime={activeRoster.endTime}
-                    users={
-                      recoilState.userShiftData?.map(
-                        (userData) => userData.user
-                      ) || []
-                    }
-                    userShiftData={recoilState.userShiftData || []}
-                    mode="assignments"
-                    assignments={assignments}
-                    customCellDisplayNames={activeRoster.customCellDisplayNames}
-                    selectedUserId={selectedUserId}
-                    onConstraintsChange={() => {
-                      // Assignment changes handled by table component directly
-                    }}
-                    isEditing={isEditing}
-                    onPostEdit={handlePostEdit}
-                    checkedPostIds={checkedPostIds}
-                    onPostCheck={handlePostCheck}
-                    onPostUncheck={handlePostUncheck}
-                    onAssignmentEdit={handleAssignmentNameUpdate}
-                  />
+                  {weeklyView && activeRoster.scheduleMode === "7d" ? (
+                    <WeeklyRosterGrid
+                      posts={activeRoster.posts}
+                      hours={activeRoster.hours || defaultHours}
+                      assignments={assignments}
+                      userShiftData={recoilState.userShiftData || []}
+                      endTime={activeRoster.endTime}
+                      customCellDisplayNames={activeRoster.customCellDisplayNames}
+                      startDate={activeRoster.startDate}
+                      onAssignmentChange={handleAssignmentChange}
+                    />
+                  ) : (
+                    <AvailabilityTableView
+                      key={`assignments-${
+                        recoilState.userShiftData
+                          ?.map((u) => u.user.name)
+                          .join("-") || "no-users"
+                      }-${
+                        activeRoster.posts?.map((p) => p.id).join("-") ||
+                        "no-posts"
+                      }`}
+                      className="h-full"
+                      posts={activeRoster.posts}
+                      hours={activeRoster.hours || defaultHours}
+                      endTime={activeRoster.endTime}
+                      users={
+                        recoilState.userShiftData?.map(
+                          (userData) => userData.user
+                        ) || []
+                      }
+                      userShiftData={recoilState.userShiftData || []}
+                      mode="assignments"
+                      assignments={assignments}
+                      customCellDisplayNames={activeRoster.customCellDisplayNames}
+                      selectedUserId={selectedUserId}
+                      onConstraintsChange={() => {
+                        // Assignment changes handled by table component directly
+                      }}
+                      isEditing={isEditing}
+                      onPostEdit={handlePostEdit}
+                      checkedPostIds={checkedPostIds}
+                      onPostCheck={handlePostCheck}
+                      onPostUncheck={handlePostUncheck}
+                      onAssignmentEdit={handleAssignmentNameUpdate}
+                    />
+                  )}
                 </div>
 
                 {/* Glass overlay for Post column header and content */}

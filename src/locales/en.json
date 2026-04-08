@@ -258,5 +258,8 @@
   "driveTokenExpiredTitle": "Google Session Expired",
   "driveTokenExpiredDesc": "Your Google session has expired. Reconnect to continue syncing your schedules to Drive",
   "driveTokenExpiredReconnect": "Reconnect",
-  "drivePromptPrivacy": "All data is stored in your private Google Drive and requires Drive permissions"
+  "drivePromptPrivacy": "All data is stored in your private Google Drive and requires Drive permissions",
+
+  "dailyView": "Daily",
+  "weeklyView": "Weekly"
 }
