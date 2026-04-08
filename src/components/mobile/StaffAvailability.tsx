@@ -151,7 +151,7 @@ export function StaffAvailability({
         >
           <IconArrowLeft size={20} className="icon-flip" />
         </button>
-        <h1 className="text-lg font-bold">{userData.user.name}</h1>
+        <h1 className="text-lg font-bold">{userData.user.name} <span className="text-muted-foreground font-normal text-sm">– {t("availability")}</span></h1>
         <div className="flex-1" />
         <RosterSwitcher />
       </div>

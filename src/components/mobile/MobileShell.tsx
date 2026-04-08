@@ -45,6 +45,7 @@ export function MobileShell() {
   const {
     addUser,
     updateUserConstraints,
+    updateUserName,
     removeUsers,
     handleUserSelect,
   } = useUserHandlers();
@@ -129,6 +130,7 @@ export function MobileShell() {
             onSelectUser={handleNavigateToAvailability}
             onAddUser={handleAddUser}
             onRemoveUser={(userId) => removeUsers([userId])}
+            onUpdateUserName={updateUserName}
           />
         )}
         {route.screen === "staff-availability" && (

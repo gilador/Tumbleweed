@@ -258,5 +258,8 @@
   "driveTokenExpiredTitle": "החיבור ל-Google פג תוקף",
   "driveTokenExpiredDesc": "החיבור ל-Google פג תוקף. התחברו מחדש כדי להמשיך לסנכרן את המשמרות ל-Drive",
   "driveTokenExpiredReconnect": "התחבר מחדש",
-  "drivePromptPrivacy": "כל הנתונים נשמרים ב-Google Drive הפרטי שלכם ודורשים הרשאות Drive"
+  "drivePromptPrivacy": "כל הנתונים נשמרים ב-Google Drive הפרטי שלכם ודורשים הרשאות Drive",
+
+  "dailyView": "יומי",
+  "weeklyView": "שבועי"
 }
