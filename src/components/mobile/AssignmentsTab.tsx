@@ -6,7 +6,7 @@ import { UniqueString } from "../../models/index";
 import { IconClock, IconMapPin, IconTrash } from "@tabler/icons-react";
 import { FloatingActionButton } from "./FloatingActionButton";
 import { ReassignSheet } from "./ReassignSheet";
-import { ShareButton } from "../ShareButton";
+import { SharePopup } from "../SharePopup";
 import { shiftState, getActiveRosterFromState } from "../../stores/shiftStore";
 import { RosterSwitcher } from "../RosterSwitcher";
 import { DayTabStrip } from "../DayTabStrip";
@@ -166,15 +166,8 @@ export function AssignmentsTab({
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <ShareButton
-            posts={posts}
-            hours={hours}
-            assignments={assignments}
-            userShiftData={userShiftData}
-            endTime={endTime}
-            customCellDisplayNames={customCellDisplayNames}
-            groupBy={groupBy}
-            onCopied={() => showInfo(t("copiedToClipboard"))}
+          <SharePopup
+            onCopied={() => showInfo(t("exportedToDrive"))}
           />
           <button
             onClick={() => setIsClearDialogOpen(true)}

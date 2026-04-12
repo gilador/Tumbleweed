@@ -40,7 +40,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { defaultHours } from "../constants/shiftManagerConstants";
 
 import { useAuth } from "../lib/auth";
-import { ShareButton } from "./ShareButton";
+import { SharePopup } from "./SharePopup";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { getSetting, setSetting } from "../lib/settings";
 import { enableDebugMode, disableDebugMode } from "../lib/analytics";
@@ -60,6 +60,7 @@ function ActionHint({ hasAssignments, isOptimized }: {
   const { hint, variant } = getActionHint({
     posts, staff, opHours, hasAssignments, isOptimized,
     selectedShiftCount: recoilStateForHint.selectedShiftCount,
+    optimizationFailed: recoilStateForHint.optimizationFailed,
   });
 
   let message = "";
@@ -304,15 +305,8 @@ export function ShiftManager() {
           <div className="flex flex-col p-2">
             <VerticalActionGroup className="flex-none gap-3">
               <SyncStatusIcon status={syncStatus} size={18} />
-              <ShareButton
-                posts={activeRoster.posts || []}
-                hours={activeRoster.hours || defaultHours}
-                assignments={assignments}
-                userShiftData={recoilState.userShiftData || []}
-                endTime={activeRoster.endTime || "18:00"}
-                customCellDisplayNames={activeRoster.customCellDisplayNames || {}}
-                groupBy="time"
-                onCopied={() => showInfo(t("copiedToClipboard"))}
+              <SharePopup
+                onCopied={() => showInfo(t("exportedToDrive"))}
                 disabled={!assignments.some((post) => post.some((u) => u !== null))}
               />
               <EditButton
@@ -421,6 +415,7 @@ export function ShiftManager() {
                       endTime={activeRoster.endTime}
                       customCellDisplayNames={activeRoster.customCellDisplayNames}
                       startDate={activeRoster.startDate}
+                      selectedUserId={selectedUserId}
                       onAssignmentChange={handleAssignmentChange}
                     />
                   ) : (

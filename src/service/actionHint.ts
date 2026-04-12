@@ -22,8 +22,9 @@ export function getActionHint(params: {
   hasAssignments: boolean;
   isOptimized: boolean;
   selectedShiftCount: number | null;
+  optimizationFailed?: boolean;
 }): { hint: HintKey; variant: HintVariant } {
-  const { posts, staff, opHours, hasAssignments, isOptimized } = params;
+  const { posts, staff, opHours, hasAssignments, isOptimized, optimizationFailed } = params;
 
   // 1. Missing inputs
   if (staff === 0) {
@@ -38,31 +39,50 @@ export function getActionHint(params: {
   const feasibleLevels = levels.filter((l) => l.feasible);
   const hasFeasibleLevels = feasibleLevels.length > 0;
 
-  // selectedShiftCount is informational only — we check hasFeasibleLevels for the hint
+  // Check if the selected shift count is feasible
+  const { selectedShiftCount } = params;
+  const selectedLevel = selectedShiftCount !== null
+    ? levels.find((l) => l.shifts === selectedShiftCount)
+    : null;
+  const isSelectedFeasible = selectedLevel ? selectedLevel.feasible : hasFeasibleLevels;
 
-  // No feasible levels at all — truly impossible configuration
-  if (!hasFeasibleLevels) {
-    const level1 = levels.find((l) => l.shifts === 1);
+  // No feasible levels at all, or the selected level is infeasible
+  if (!hasFeasibleLevels || !isSelectedFeasible) {
+    const refLevel = selectedLevel || levels.find((l) => l.shifts === 1);
     return {
       hint: {
         key: "hintOverCapacity",
-        capacity: (level1?.availableSlots ?? 0).toString(),
-        needed: (level1?.neededSlots ?? posts).toString(),
+        capacity: (refLevel?.availableSlots ?? 0).toString(),
+        needed: (refLevel?.neededSlots ?? posts).toString(),
       },
       variant: "warning",
     };
   }
 
-  // 3. Optimizer ran successfully and assignments exist
+  // 3. Optimizer ran and explicitly failed (infeasible due to real constraints)
+  //    computeLevels may say feasible, but HiGHS with availability/rest constraints disagrees
+  if (optimizationFailed) {
+    const refLevel = selectedLevel || levels.find((l) => l.shifts === 1);
+    return {
+      hint: {
+        key: "hintOverCapacity",
+        capacity: (refLevel?.availableSlots ?? 0).toString(),
+        needed: (refLevel?.neededSlots ?? posts).toString(),
+      },
+      variant: "warning",
+    };
+  }
+
+  // 4. Optimizer ran successfully and assignments exist
   if (isOptimized && hasAssignments) {
     return { hint: { key: "hintOptimized" }, variant: "success" };
   }
 
-  // 4. Manual assignments exist
+  // 5. Manual assignments exist
   if (hasAssignments) {
     return { hint: { key: "hintNotOptimized" }, variant: "info" };
   }
 
-  // 5. Ready to optimize
+  // 6. Ready to optimize
   return { hint: { key: "hintRunOptimizer" }, variant: "info" };
 }

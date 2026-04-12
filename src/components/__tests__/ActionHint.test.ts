@@ -7,6 +7,7 @@ const base = {
   hasAssignments: false,
   isOptimized: false,
   selectedShiftCount: null as number | null,
+  optimizationFailed: false,
 };
 
 function hint(overrides: Partial<typeof base> = {}) {
@@ -40,10 +41,24 @@ describe("getActionHint — feasibility via levels", () => {
     expect(r.variant).toBe("warning");
   });
 
-  it("selected infeasible level but other levels feasible → hintRunOptimizer", () => {
-    // 4 staff, 3 posts, select 4 shifts (infeasible), but level 1 is feasible
+  it("selected infeasible level shows warning even if other levels feasible", () => {
+    // 4 staff, 3 posts, select 4 shifts (infeasible for this count)
     const r = hint({ staff: 4, posts: 3, selectedShiftCount: 4, opHours: 10 });
-    // Level 1: 4 staff ≥ 3 posts → feasible, so don't warn
+    // The selected level is infeasible → show warning, don't encourage optimizing
+    expect(r.hint!.key).toBe("hintOverCapacity");
+    expect(r.variant).toBe("warning");
+  });
+
+  it("selected feasible level shows run optimizer hint", () => {
+    // 5 staff, 3 posts, select 1 shift (feasible)
+    const r = hint({ staff: 5, posts: 3, selectedShiftCount: 1, opHours: 9 });
+    expect(r.hint).toEqual({ key: "hintRunOptimizer" });
+    expect(r.variant).toBe("info");
+  });
+
+  it("no selected level with feasible levels → hintRunOptimizer", () => {
+    // selectedShiftCount is null, but feasible levels exist
+    const r = hint({ staff: 5, posts: 3, selectedShiftCount: null });
     expect(r.hint).toEqual({ key: "hintRunOptimizer" });
     expect(r.variant).toBe("info");
   });
@@ -56,9 +71,16 @@ describe("getActionHint — optimized state", () => {
     expect(r.variant).toBe("success");
   });
 
-  it("optimized without assignments → hintRunOptimizer (stale)", () => {
+  it("optimized without assignments but no failure flag → hintRunOptimizer", () => {
+    // isOptimized=true but no assignments and no failure flag — stale state, re-run
     const r = hint({ isOptimized: true, hasAssignments: false });
     expect(r.hint).toEqual({ key: "hintRunOptimizer" });
+  });
+
+  it("optimization explicitly failed → hintOverCapacity", () => {
+    const r = hint({ isOptimized: false, hasAssignments: false, optimizationFailed: true });
+    expect(r.hint!.key).toBe("hintOverCapacity");
+    expect(r.variant).toBe("warning");
   });
 });
 
