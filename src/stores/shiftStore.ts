@@ -27,6 +27,7 @@ export interface PersistedShiftData {
 // Full state including syncStatus
 export interface ShiftState extends PersistedShiftData {
   syncStatus: SyncStatus;
+  optimizationFailed?: boolean;
 }
 
 // --- Backward-compatible accessors ---
@@ -143,7 +144,7 @@ const persistenceEffect: AtomEffect<ShiftState> = ({
     if (newValue instanceof DefaultValue) {
       console.log("[persistenceEffect] Atom was reset.");
       try {
-        const { syncStatus, ...persistableDefault } = initialLoadState;
+        const { syncStatus, optimizationFailed: _of, ...persistableDefault } = initialLoadState;
         await saveStateToLocalStorage(LOCAL_STORAGE_KEY, persistableDefault);
       } catch (error) {
         console.error("[shiftStore] onSet (DefaultValue): Error saving:", error);
@@ -154,8 +155,8 @@ const persistenceEffect: AtomEffect<ShiftState> = ({
     const oldConcreteValue =
       oldValue instanceof DefaultValue ? initialLoadState : oldValue;
 
-    const { syncStatus: _newSS, ...newPersistedData } = newValue;
-    const { syncStatus: _oldSS, ...oldPersistedData } = oldConcreteValue;
+    const { syncStatus: _newSS, optimizationFailed: _newOF, ...newPersistedData } = newValue;
+    const { syncStatus: _oldSS, optimizationFailed: _oldOF, ...oldPersistedData } = oldConcreteValue;
 
     // If userShiftData is empty and initialized, clear per-roster slot edits
     if (

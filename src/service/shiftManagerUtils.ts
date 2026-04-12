@@ -2,6 +2,7 @@ import { Constraint } from "../models";
 import { UniqueString } from "../models/index";
 import { defaultHours } from "../constants/shiftManagerConstants";
 import { computeLevels } from "./shiftLevels";
+import { encodeFlatHour } from "./weeklyScheduleUtils";
 
 /**
  * Generate dynamic hours based on a selected shift level.
@@ -56,6 +57,30 @@ export function generateDynamicHours(
 
   console.log("generateDynamicHours: Generated", dynamicHours.length, "hours for", level.shifts, "shifts of", level.duration, "h");
   return dynamicHours;
+}
+
+/**
+ * Generate weekly hours (7 days × single-day hours) from single-day parameters.
+ * Each hour value uses the "dayIndex·HH:MM" encoding for weekly mode.
+ */
+export function generateWeeklyDynamicHours(
+  startTime: string,
+  endTime: string,
+  postCount: number,
+  staffCount: number,
+  selectedShiftCount: number | null
+): UniqueString[] {
+  const singleDayHours = generateDynamicHours(startTime, endTime, postCount, staffCount, selectedShiftCount);
+  const weeklyHours: UniqueString[] = [];
+  for (let day = 0; day < 7; day++) {
+    for (let i = 0; i < singleDayHours.length; i++) {
+      weeklyHours.push({
+        id: `d${day}-h${i}`,
+        value: encodeFlatHour(day, singleDayHours[i].value),
+      });
+    }
+  }
+  return weeklyHours;
 }
 
 export function getDefaultConstraints(

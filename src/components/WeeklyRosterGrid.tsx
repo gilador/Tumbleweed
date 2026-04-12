@@ -24,6 +24,7 @@ interface WeeklyRosterGridProps {
   endTime: string;
   customCellDisplayNames: { [slotKey: string]: string };
   startDate: string | null;
+  selectedUserId?: string | null;
   onAssignmentChange?: (
     postIndex: number,
     hourIndex: number,
@@ -40,6 +41,7 @@ export function WeeklyRosterGrid({
   endTime: _endTime,
   customCellDisplayNames,
   startDate,
+  selectedUserId,
   onAssignmentChange,
   onDayDrillDown,
 }: WeeklyRosterGridProps) {
@@ -203,7 +205,9 @@ export function WeeklyRosterGrid({
                     postIndex,
                     hourIndex
                   );
-                  const isAssigned = assignments[postIndex]?.[hourIndex] !== null;
+                  const assignedUserId = assignments[postIndex]?.[hourIndex];
+                  const isAssigned = assignedUserId !== null;
+                  const isSelectedUser = selectedUserId != null && assignedUserId === selectedUserId;
                   const isReassigning =
                     reassignCell?.postIndex === postIndex &&
                     reassignCell?.hourIndex === hourIndex;
@@ -213,13 +217,17 @@ export function WeeklyRosterGrid({
                       <TooltipTrigger asChild>
                         <div
                           className={`relative border-b border-border text-center py-1.5 text-xs cursor-default select-none transition-colors ${
-                            day.dayIndex % 2 === 0
-                              ? "bg-muted/30"
-                              : "bg-background"
+                            isSelectedUser
+                              ? "bg-primary/20 font-bold"
+                              : day.dayIndex % 2 === 0
+                                ? "bg-muted/30"
+                                : "bg-background"
                           } ${
-                            isAssigned
+                            isAssigned && !isSelectedUser
                               ? "font-medium"
-                              : "text-muted-foreground/40"
+                              : !isAssigned
+                                ? "text-muted-foreground/40"
+                                : ""
                           } ${
                             !isMobile
                               ? "cursor-pointer hover:bg-accent/50"

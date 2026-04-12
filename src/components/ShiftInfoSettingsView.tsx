@@ -8,7 +8,7 @@ import { useScheduleMode } from "../hooks/useScheduleMode";
 import { TimeInput } from "./TimeInput";
 import { useLevels } from "../hooks/useLevels";
 import { ShiftLevel } from "../service/shiftLevels";
-import { generateDynamicHours } from "../service/shiftManagerUtils";
+import { generateDynamicHours, generateWeeklyDynamicHours } from "../service/shiftManagerUtils";
 
 export interface ShiftInfoSettingsViewProps {
   startHour: string;
@@ -62,7 +62,9 @@ export function ShiftInfoSettingsView({
     const startT = newStartTime || localStartTime;
     const endT = newEndTime || localEndTime;
 
-    const newHours = generateDynamicHours(startT, endT, posts.length, staffCount, level.shifts);
+    const newHours = scheduleMode === "7d"
+      ? generateWeeklyDynamicHours(startT, endT, posts.length, staffCount, level.shifts)
+      : generateDynamicHours(startT, endT, posts.length, staffCount, level.shifts);
 
     setShiftData((prev) => {
       const roster = getActiveRosterFromState(prev);
@@ -112,7 +114,9 @@ export function ShiftInfoSettingsView({
   const applyTimeChange = (newStart: string, newEnd: string) => {
     // Recompute with current selected level
     const currentShiftCount = shiftData.selectedShiftCount;
-    const newHours = generateDynamicHours(newStart, newEnd, posts.length, staffCount, currentShiftCount);
+    const newHours = scheduleMode === "7d"
+      ? generateWeeklyDynamicHours(newStart, newEnd, posts.length, staffCount, currentShiftCount)
+      : generateDynamicHours(newStart, newEnd, posts.length, staffCount, currentShiftCount);
 
     setShiftData((prev) => {
       const roster = getActiveRosterFromState(prev);

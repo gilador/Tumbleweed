@@ -228,9 +228,11 @@ export function useShiftOptimization(
         if (allOptimal) {
           newState.syncStatus = "synced";
           newState.optimizationSignature = signature;
+          newState.optimizationFailed = false;
         } else {
           newState.syncStatus = "no-optimised";
           newState.optimizationSignature = null;
+          newState.optimizationFailed = true;
         }
         return newState;
       });
