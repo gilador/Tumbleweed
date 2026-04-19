@@ -27,6 +27,8 @@ import { Button } from "../elements/button";
 import tumbleweedIcon from "../../../assets/tumbleweed.svg";
 import { useScheduleMode } from "../../hooks/useScheduleMode";
 import { encodeFlatHour } from "../../service/weeklyScheduleUtils";
+import { ShiftLevel } from "../../service/shiftLevels";
+import { generateDynamicHours, generateWeeklyDynamicHours } from "../../service/shiftManagerUtils";
 
 interface SettingsTabProps {
   posts: UniqueString[];
@@ -73,6 +75,48 @@ export function SettingsTab({
   const { scheduleMode, startDate, switchTo7D, switchTo24H, updateStartDate } = useScheduleMode();
 
   const { levels, selectedLevel, setLevel: setLevelHook } = useLevels();
+
+  const applyLevel = (level: ShiftLevel) => {
+    const newHours = scheduleMode === "7d"
+      ? generateWeeklyDynamicHours(startTime, endTime, posts.length, staffCount, level.shifts)
+      : generateDynamicHours(startTime, endTime, posts.length, staffCount, level.shifts);
+
+    setShiftData((prev) => {
+      const roster = getActiveRosterFromState(prev);
+      const activeRosterId = prev.activeRosterId;
+
+      const updatedUserShiftData = (prev.userShiftData || []).map((userData) => {
+        const updatedConstraints = (roster.posts || []).map((post, postIdx) => {
+          return newHours.map((hour, hourIndex) => {
+            const existingConstraint = userData.constraints?.[postIdx]?.[hourIndex];
+            return existingConstraint || { postID: post.id, hourID: hour.id, availability: true };
+          });
+        });
+        return {
+          ...userData,
+          constraints: updatedConstraints,
+          constraintsByRoster: { ...userData.constraintsByRoster, [activeRosterId]: updatedConstraints },
+        };
+      });
+
+      const shouldClearAssignments = roster.hours?.length !== newHours.length;
+      const clearedAssignments = shouldClearAssignments
+        ? (roster.posts || []).map(() => newHours.map(() => null))
+        : roster.assignments;
+
+      return {
+        ...updateActiveRoster(prev, (r) => ({
+          ...r,
+          startTime,
+          endTime,
+          hours: newHours,
+          assignments: clearedAssignments,
+        })),
+        selectedShiftCount: level.shifts,
+        userShiftData: updatedUserShiftData,
+      };
+    });
+  };
 
   const updateShiftStateWithNewHours = useCallback(
     (newStartTime: string, newEndTime: string, _newIntensity: number) => {
@@ -414,7 +458,7 @@ export function SettingsTab({
           if (levels.length === 1 && feasibleLevels.length <= 1) {
             return (
               <div className="flex flex-col items-center gap-2 py-2">
-                <div className={`w-4 h-4 rounded-full ${feasibleLevels.length === 1 ? "bg-primary" : "bg-muted-foreground/30"}`} />
+                <div className={`w-1.5 h-5 rounded-sm ${feasibleLevels.length === 1 ? "bg-primary" : "bg-muted-foreground/30"}`} />
                 <span className="text-sm font-medium">{levels[0].shifts}×{levels[0].duration.toFixed(1)}h</span>
                 {feasibleLevels.length === 0 && levels[0].staffGap && (
                   <span className="text-xs text-red-500">
@@ -441,23 +485,24 @@ export function SettingsTab({
                           })}`
                         : "";
                       return (
-                      <div key={i} className="relative group flex items-center justify-center w-5 h-5">
-                      <button
-                        type="button"
-                        className={`rounded-full transition-all ${
-                          level.feasible
-                            ? i === selectedIdx
-                              ? "w-5 h-5 bg-primary shadow-sm"
-                              : "w-2.5 h-2.5 bg-muted-foreground/60 hover:bg-muted-foreground"
-                            : "w-2.5 h-2.5 bg-muted-foreground/20 cursor-default"
-                        }`}
+                      <div
+                        key={i}
+                        className={`relative group flex items-center justify-center w-5 h-5 ${level.feasible ? "cursor-pointer" : "cursor-default"}`}
                         onClick={() => {
                           if (level.feasible) {
                             setLevelHook(level.shifts);
-                            updateShiftStateWithNewHours(startTime, endTime, 0);
+                            applyLevel(level);
                           }
                         }}
-                        disabled={!level.feasible}
+                      >
+                      <div
+                        className={`transition-all pointer-events-none ${
+                          level.feasible
+                            ? i === selectedIdx
+                              ? "w-1.5 h-5 rounded-sm bg-primary shadow-sm"
+                              : "w-0.5 h-4 rounded-sm bg-muted-foreground/40 group-hover:bg-muted-foreground/70 group-hover:h-[1.125rem]"
+                            : "w-0.5 h-4 rounded-sm bg-muted-foreground/20"
+                        }`}
                       />
                       {tooltipText && (
                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-foreground text-background text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 pointer-events-none z-20">

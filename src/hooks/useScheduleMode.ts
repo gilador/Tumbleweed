@@ -3,6 +3,7 @@ import { shiftState, getActiveRosterFromState, updateActiveRoster } from "@/stor
 import { UniqueString, UserShiftData } from "@/models";
 import { encodeFlatHour, parseFlatHour } from "@/service/weeklyScheduleUtils";
 import { getTodayISO } from "@/service/dayLabelUtils";
+import { trackEvent } from "@/lib/analytics";
 
 export function useScheduleMode() {
   const [state, setState] = useRecoilState(shiftState);
@@ -130,6 +131,8 @@ export function useScheduleMode() {
         userShiftData: weeklyUserShiftData,
       };
     });
+    trackEvent("weekly-view-opened", { mode: "7d" });
+    trackEvent("schedule-view-mode-changed", { from: "24h", to: "7d" });
   };
 
   const switchTo24H = () => {
@@ -194,6 +197,7 @@ export function useScheduleMode() {
         userShiftData: day0UserShiftData,
       };
     });
+    trackEvent("schedule-view-mode-changed", { from: "7d", to: "24h" });
   };
 
   const updateStartDate = (date: string) => {

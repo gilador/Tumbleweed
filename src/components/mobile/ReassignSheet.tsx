@@ -41,6 +41,7 @@ export function ReassignSheet({
 
         {/* Header */}
         <div className="px-4 pb-3 border-b border-border flex-none">
+          <p className="text-xs font-semibold text-muted-foreground mb-1 text-center">{t("updatePostAssignment")}</p>
           <h3 className="text-sm font-semibold">{postName}</h3>
           <p className="text-xs text-muted-foreground" dir="ltr">{timeRange}</p>
         </div>

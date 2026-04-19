@@ -6,6 +6,7 @@ import html2canvas from "html2canvas";
 import type { UniqueString, UserShiftData } from "../models";
 import { generateTextSummary } from "../service/textSummary";
 import { shiftState, getActiveRosterFromState } from "../stores/shiftStore";
+import { trackEvent } from "../lib/analytics";
 
 interface ShareButtonProps {
   posts: UniqueString[];
@@ -69,6 +70,7 @@ export function ShareButton({
 
   const handlePrint = () => {
     setDropdownOpen(false);
+    trackEvent("pdf-downloaded", { type: "roster", rosterCount: 1 });
     window.print();
   };
 
@@ -134,6 +136,7 @@ export function ShareButton({
 
   const handleWhatsApp = () => {
     setDropdownOpen(false);
+    trackEvent("whatsapp-shared", { type: "roster" });
     const text = encodeURIComponent(getSummary());
     window.open(`https://wa.me/?text=${text}`, "_blank");
   };

@@ -8,6 +8,10 @@ type CoreEventMap = {
   "schedule-published": { filledSlots: number; totalSlots: number };
   "staff-invited": { count: number };
   "availability-received": { dayCount: number };
+  "weekly-view-opened": { mode: "7d" };
+  "pdf-downloaded": { type: "roster" | "staff"; rosterCount: number };
+  "whatsapp-shared": { type: "roster" | "staff" };
+  "schedule-view-mode-changed": { from: "24h" | "7d"; to: "24h" | "7d" };
 };
 
 type CoreEventName = keyof CoreEventMap;

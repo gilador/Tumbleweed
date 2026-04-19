@@ -143,7 +143,7 @@ export function WorkerList({
                   <div className="flex items-center w-full min-w-0">
                     {assignments && hasAnyAssignments() && (
                       <div
-                        className={`me-2 min-w-[1.5rem] text-center text-xs font-semibold rounded-full px-1 py-0.5 ${
+                        className={`me-2 min-w-[1.5rem] text-center text-xs font-semibold rounded-md px-1 py-0.5 ${
                           selectedUserId === user.id
                             ? "bg-background text-foreground"
                             : "bg-muted text-muted-foreground"

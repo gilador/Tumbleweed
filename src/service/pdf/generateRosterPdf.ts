@@ -39,6 +39,27 @@ function getTimeRange(roster: RosterState, hourIndex: number): string {
   return `${start}-${end}`;
 }
 
+function getDateRangeLabel(startDate: string): string {
+  const start = new Date(startDate);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  const fmt = (d: Date) => {
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    return `${dd}.${mm}`;
+  };
+  return `${fmt(start)}-${fmt(end)}`;
+}
+
+export function getRosterPdfFilename(roster: RosterState): string {
+  const name = roster.name || "roster";
+  if (roster.scheduleMode === "7d" && roster.startDate) {
+    const range = getDateRangeLabel(roster.startDate);
+    return `${name} — ${range}.pdf`;
+  }
+  return `${name}.pdf`;
+}
+
 export async function generateRosterPdf(options: RosterPdfOptions): Promise<Blob> {
   const { roster, userShiftData, locale, rosterLabel } = options;
   const { posts, hours, scheduleMode, startDate } = roster;
@@ -52,32 +73,117 @@ export async function generateRosterPdf(options: RosterPdfOptions): Promise<Blob
 
   const fontName = "NotoSans";
   const title = rosterLabel || roster.name || "Schedule";
+  const pageHeight = doc.internal.pageSize.height;
+  const pageWidth = doc.internal.pageSize.width;
+  const marginBottom = 16;
 
-  for (let dayIdx = 0; dayIdx < numDays; dayIdx++) {
-    if (dayIdx > 0) doc.addPage();
-
-    const slice = isWeekly
-      ? getDaySlice(hours.length, dayIdx)
-      : { start: 0, end: hours.length };
-    const dayHourIndices = Array.from(
-      { length: slice.end - slice.start },
-      (_, i) => slice.start + i
-    );
-
+  // For weekly: print title once at top, then stack all day tables
+  if (isWeekly) {
     let yPos = 15;
 
-    // Title
+    // Main title with date range
     doc.setFontSize(14);
     doc.setFont(fontName, "bold");
-    const titleText = isWeekly
-      ? rtl(`${title} — ${getDayLabel(startDate || getTodayISO(), dayIdx, locale)}`)
-      : rtl(title);
-    doc.text(titleText, isRtl ? doc.internal.pageSize.width - 14 : 14, yPos, {
+    const dateRange = startDate
+      ? getDateRangeLabel(startDate)
+      : "";
+    const titleText = rtl(dateRange ? `${title} — ${dateRange}` : title);
+    doc.text(titleText, isRtl ? pageWidth - 14 : 14, yPos, {
+      align: isRtl ? "right" : "left",
+    });
+    yPos += 8;
+
+    for (let dayIdx = 0; dayIdx < numDays; dayIdx++) {
+      const slice = getDaySlice(hours.length, dayIdx);
+      const dayHourIndices = Array.from(
+        { length: slice.end - slice.start },
+        (_, i) => slice.start + i
+      );
+
+      // Estimate table height: header row + data rows, ~7mm each
+      const estimatedHeight = (posts.length + 1) * 7 + 10;
+
+      // Check if we need a new page
+      if (yPos + estimatedHeight > pageHeight - marginBottom) {
+        // Footer on current page
+        doc.setFontSize(8);
+        doc.setFont(fontName, "normal");
+        doc.setTextColor(150);
+        doc.text("Powered by Tumbleweed", pageWidth / 2, pageHeight - 8, { align: "center" });
+        doc.setTextColor(0);
+        doc.addPage();
+        yPos = 15;
+      }
+
+      // Day sub-header
+      doc.setFontSize(10);
+      doc.setFont(fontName, "bold");
+      const dayLabel = rtl(getDayLabel(startDate || getTodayISO(), dayIdx, locale));
+      doc.text(dayLabel, isRtl ? pageWidth - 14 : 14, yPos, {
+        align: isRtl ? "right" : "left",
+      });
+      yPos += 5;
+
+      // Build table data
+      const timeHeaders = dayHourIndices.map((hIdx) => getTimeRange(roster, hIdx));
+      const head = isRtl
+        ? [[...timeHeaders.reverse(), rtl("תפקיד")]]
+        : [["Post", ...timeHeaders]];
+
+      const body = posts.map((post, pIdx) => {
+        const cells = dayHourIndices.map((hIdx) =>
+          rtl(resolveUserName(roster, userShiftData, pIdx, hIdx))
+        );
+        return isRtl
+          ? [...cells.reverse(), rtl(post.value)]
+          : [post.value, ...cells];
+      });
+
+      autoTable(doc, {
+        startY: yPos,
+        head,
+        body,
+        styles: {
+          fontSize: 8,
+          cellPadding: 2,
+          halign: isRtl ? "right" : "center",
+          font: fontName,
+        },
+        headStyles: {
+          fillColor: [245, 245, 245],
+          textColor: [0, 0, 0],
+          fontStyle: "bold",
+          halign: "center",
+        },
+        columnStyles: isRtl
+          ? { [timeHeaders.length]: { fontStyle: "bold", halign: "right" } }
+          : { 0: { fontStyle: "bold", halign: isRtl ? "right" : "left" } },
+        theme: "grid",
+        margin: { left: 14, right: 14 },
+      });
+
+      // Get Y position after table
+      yPos = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
+    }
+
+    // Footer on last page
+    doc.setFontSize(8);
+    doc.setFont(fontName, "normal");
+    doc.setTextColor(150);
+    doc.text("Powered by Tumbleweed", pageWidth / 2, pageHeight - 8, { align: "center" });
+    doc.setTextColor(0);
+  } else {
+    // Single-day mode: one table, same as before
+    let yPos = 15;
+    const dayHourIndices = Array.from({ length: hours.length }, (_, i) => i);
+
+    doc.setFontSize(14);
+    doc.setFont(fontName, "bold");
+    doc.text(rtl(title), isRtl ? pageWidth - 14 : 14, yPos, {
       align: isRtl ? "right" : "left",
     });
     yPos += 10;
 
-    // Build table data
     const timeHeaders = dayHourIndices.map((hIdx) => getTimeRange(roster, hIdx));
     const head = isRtl
       ? [[...timeHeaders.reverse(), rtl("תפקיד")]]
@@ -115,14 +221,10 @@ export async function generateRosterPdf(options: RosterPdfOptions): Promise<Blob
       margin: { left: 14, right: 14 },
     });
 
-    // Footer
-    const pageHeight = doc.internal.pageSize.height;
     doc.setFontSize(8);
     doc.setFont(fontName, "normal");
     doc.setTextColor(150);
-    doc.text("Powered by Tumbleweed", doc.internal.pageSize.width / 2, pageHeight - 8, {
-      align: "center",
-    });
+    doc.text("Powered by Tumbleweed", pageWidth / 2, pageHeight - 8, { align: "center" });
     doc.setTextColor(0);
   }
 

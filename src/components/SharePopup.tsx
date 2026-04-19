@@ -17,11 +17,12 @@ import {
 } from "@/components/elements/dialog";
 import { Checkbox } from "@/components/elements/checkbox";
 import { shiftState } from "@/stores/shiftStore";
-import { generateRosterPdf } from "@/service/pdf/generateRosterPdf";
+import { generateRosterPdf, getRosterPdfFilename } from "@/service/pdf/generateRosterPdf";
 import { generateStaffPdf } from "@/service/pdf/generateStaffPdf";
 import { hasGoogleDriveAccess } from "@/lib/googleDrive";
 import { exportScheduleToDrive } from "@/lib/driveExport";
 import type { RosterState, UserShiftData } from "@/models";
+import { trackEvent } from "@/lib/analytics";
 
 type ViewMode = "full" | "staff";
 
@@ -136,8 +137,7 @@ export function SharePopup({ onCopied, disabled }: SharePopupProps) {
     const results = await Promise.all(
       selectedRosters.map(async (roster) => {
         const blob = await generateRosterPdf({ roster, userShiftData, locale });
-        const name = roster.name || "roster";
-        return { filename: `${name}.pdf`, blob };
+        return { filename: getRosterPdfFilename(roster), blob };
       })
     );
     return results;
@@ -147,6 +147,7 @@ export function SharePopup({ onCopied, disabled }: SharePopupProps) {
 
   const handleDownload = async () => {
     const pdfs = await generatePdfs();
+    trackEvent("pdf-downloaded", { type: viewMode === "staff" ? "staff" : "roster", rosterCount: selectedRosters.length });
     for (const { filename, blob } of pdfs) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -174,6 +175,7 @@ export function SharePopup({ onCopied, disabled }: SharePopupProps) {
   };
 
   const handleWhatsApp = async () => {
+    trackEvent("whatsapp-shared", { type: viewMode === "staff" ? "staff" : "roster" });
     const pdfs = await generatePdfs();
     if (pdfs.length === 0) return;
 
@@ -202,7 +204,7 @@ export function SharePopup({ onCopied, disabled }: SharePopupProps) {
       // Generate all PDFs (roster + staff) for Drive export
       const rosterPdfs = await Promise.all(
         selectedRosters.map(async (roster) => ({
-          filename: `${roster.name || "roster"}-roster.pdf`,
+          filename: getRosterPdfFilename(roster),
           blob: await generateRosterPdf({ roster, userShiftData, locale }),
         }))
       );

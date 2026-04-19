@@ -343,7 +343,7 @@ export function ShiftManager() {
               <div className="flex items-center gap-2 mb-2 flex-none">
                 <h3 className="text-lg font-semibold">{t("shiftAssignments")}</h3>
                 <RosterSwitcher />
-                <div className="flex items-center gap-3 text-sm bg-muted px-3 py-1 rounded-md whitespace-nowrap">
+                <div className="flex items-center gap-3 text-sm text-foreground bg-muted px-3 py-1 rounded-md whitespace-nowrap">
                   <span className="font-medium">
                     {activeRoster.scheduleMode === "7d" ? t("weeklyRoster") : t("singleDay")}
                   </span>
@@ -591,7 +591,7 @@ export function ShiftManager() {
             >
               <div className="flex items-center gap-2 flex-none mb-2">
                 <h3 className="text-lg font-semibold">{t("staff")}</h3>
-                <div className="flex items-center gap-3 text-sm bg-muted px-3 py-1 rounded-md">
+                <div className="flex items-center gap-3 text-sm text-foreground bg-muted px-3 py-1 rounded-md">
                   <span className="font-medium">
                     {t("staffCount", { count: recoilState.userShiftData?.length || 0 })}
                   </span>

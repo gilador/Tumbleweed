@@ -65,14 +65,14 @@ export function DayTabStrip({
             } ${
               isActive
                 ? "bg-primary text-primary-foreground"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                : "bg-muted text-muted-foreground hover:bg-accent"
             }`}
           >
             <span dir="ltr" className="transition-transform duration-300">{label}</span>
             <span
               className={`absolute bottom-1 text-[8px] leading-none transition-all duration-300 ${
                 showDot
-                  ? isActive ? "text-primary-foreground/70 opacity-100" : "text-gray-400 opacity-100"
+                  ? isActive ? "text-primary-foreground/70 opacity-100" : "text-muted-foreground/60 opacity-100"
                   : "opacity-0"
               }`}
             >

@@ -26,6 +26,8 @@
   "allAvailable": "הכל זמין",
   "allUnavailable": "הכל לא זמין",
   "unavailable": "לא זמין",
+  "allDayAvailable": "כל היום זמין",
+  "allDayUnavailable": "כל היום לא זמין",
   "unassigned": "לא משובץ",
   "unassign": "הסר שיבוץ",
 
@@ -62,6 +64,7 @@
   "shareDebugInfoEnable": "אישור",
   "shareDebugInfoCancel": "ביטול",
 
+  "updatePostAssignment": "עדכון שיבוץ עמדה",
   "shiftAssignments": "שיבוצי משמרות",
   "shiftAdjustment": "הגדרות משמרת",
   "shiftInput": "הגדרת משמרת",
