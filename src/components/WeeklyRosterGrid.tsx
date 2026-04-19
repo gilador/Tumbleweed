@@ -15,6 +15,7 @@ import {
   TooltipContent,
 } from "@/components/ui/tooltip";
 import { useIsMobile } from "../hooks/useIsMobile";
+import { colors } from "@/constants/colors";
 
 interface WeeklyRosterGridProps {
   posts: UniqueString[];
@@ -97,6 +98,12 @@ export function WeeklyRosterGrid({
     hourIndex: number;
   } | null>(null);
 
+  // Track which cell's name is revealed (mobile only)
+  const [revealCell, setRevealCell] = useState<{
+    postIndex: number;
+    hourIndex: number;
+  } | null>(null);
+
   function getCellDisplay(
     postIndex: number,
     hourIndex: number
@@ -114,7 +121,19 @@ export function WeeklyRosterGrid({
   }
 
   function handleCellClick(postIndex: number, hourIndex: number) {
-    if (isMobile) return; // Read-only on mobile
+    if (isMobile) {
+      const { fullName } = getCellDisplay(postIndex, hourIndex);
+      if (fullName === "") {
+        setRevealCell(null);
+        return;
+      }
+      if (revealCell?.postIndex === postIndex && revealCell?.hourIndex === hourIndex) {
+        setRevealCell(null);
+      } else {
+        setRevealCell({ postIndex, hourIndex });
+      }
+      return;
+    }
     if (reassignCell?.postIndex === postIndex && reassignCell?.hourIndex === hourIndex) {
       setReassignCell(null);
     } else {
@@ -132,7 +151,7 @@ export function WeeklyRosterGrid({
     <div className="flex flex-col h-full overflow-hidden">
       <div className="flex-1 overflow-auto">
         <div
-          className="grid min-w-max"
+          className="grid gap-1 min-w-max"
           style={{
             gridTemplateColumns: `max-content repeat(${totalColumns}, minmax(40px, 1fr))`,
           }}
@@ -144,15 +163,8 @@ export function WeeklyRosterGrid({
           {days.map((day) => (
             <div
               key={`day-header-${day.dayIndex}`}
-              className={`text-center text-xs font-semibold py-1.5 border-b-2 border-border ${
-                day.dayIndex % 2 === 0
-                  ? "bg-muted/50"
-                  : "bg-background"
-              } ${isMobile ? "cursor-pointer hover:bg-accent/50" : ""}`}
-              style={{
-                gridColumn: `span ${shiftsPerDay}`,
-                borderInlineStart: day.dayIndex > 0 ? "2px solid var(--border)" : undefined,
-              }}
+              className={`text-start text-xs font-semibold py-1.5 ps-1 ${colors.text.default} ${isMobile ? "cursor-pointer hover:bg-accent/50" : ""}`}
+              style={{ gridColumn: `span ${shiftsPerDay}` }}
               onClick={() => isMobile && onDayDrillDown?.(day.dayIndex)}
               data-testid={`day-header-${day.dayIndex}`}
             >
@@ -161,22 +173,14 @@ export function WeeklyRosterGrid({
           ))}
 
           {/* Row 2: Shift time sub-headers */}
-          <div className="sticky start-0 z-20 bg-background border-b border-border" />
+          <div className="sticky start-0 z-20 bg-background" />
           {days.map((day) =>
             day.hours.map((hour, shiftIndex) => {
               const time = getDisplayTime(hour.value);
               return (
                 <div
                   key={`shift-header-${day.dayIndex}-${shiftIndex}`}
-                  className={`text-center text-[10px] text-muted-foreground py-1 border-b border-border ${
-                    day.dayIndex % 2 === 0 ? "bg-muted/50" : "bg-background"
-                  }`}
-                  style={{
-                    borderInlineStart:
-                      shiftIndex === 0 && day.dayIndex > 0
-                        ? "2px solid var(--border)"
-                        : undefined,
-                  }}
+                  className="text-center text-[10px] text-muted-foreground py-1"
                   dir="ltr"
                 >
                   {time}
@@ -191,7 +195,7 @@ export function WeeklyRosterGrid({
               {/* Post name (sticky) */}
               <div
                 key={`post-${post.id}`}
-                className="sticky start-0 z-10 bg-background border-b border-border px-2 py-1.5 text-xs font-medium flex items-center whitespace-nowrap"
+                className="sticky start-0 z-10 bg-background px-2 py-2 text-xs font-medium flex items-center whitespace-nowrap"
                 style={{ minWidth: "5rem" }}
               >
                 {post.value}
@@ -211,69 +215,81 @@ export function WeeklyRosterGrid({
                   const isReassigning =
                     reassignCell?.postIndex === postIndex &&
                     reassignCell?.hourIndex === hourIndex;
+                  const isRevealing =
+                    isMobile &&
+                    revealCell?.postIndex === postIndex &&
+                    revealCell?.hourIndex === hourIndex;
 
-                  return (
-                    <Tooltip key={`cell-${postIndex}-${hourIndex}`}>
-                      <TooltipTrigger asChild>
+                  const cellKey = `cell-${postIndex}-${hourIndex}`;
+                  const cellDiv = (
+                    <div
+                      key={cellKey}
+                      className={`relative rounded-md text-center py-2 text-xs cursor-default select-none transition-colors ${
+                        isSelectedUser
+                          ? `${colors.cell.selected} font-bold`
+                          : colors.cell.dim
+                      } ${
+                        isAssigned && !isSelectedUser
+                          ? "font-medium"
+                          : !isAssigned
+                            ? "text-muted-foreground/40"
+                            : ""
+                      } ${
+                        !isMobile
+                          ? "cursor-pointer hover:bg-accent/50"
+                          : ""
+                      } ${isReassigning || isRevealing ? "ring-2 ring-primary ring-inset" : ""}`}
+                      onClick={() => handleCellClick(postIndex, hourIndex)}
+                      data-testid={`cell-${postIndex}-${hourIndex}`}
+                      role="gridcell"
+                    >
+                      {badge}
+
+                      {/* Name reveal label (mobile only) */}
+                      {isRevealing && (
                         <div
-                          className={`relative border-b border-border text-center py-1.5 text-xs cursor-default select-none transition-colors ${
-                            isSelectedUser
-                              ? "bg-primary/20 font-bold"
-                              : day.dayIndex % 2 === 0
-                                ? "bg-muted/30"
-                                : "bg-background"
-                          } ${
-                            isAssigned && !isSelectedUser
-                              ? "font-medium"
-                              : !isAssigned
-                                ? "text-muted-foreground/40"
-                                : ""
-                          } ${
-                            !isMobile
-                              ? "cursor-pointer hover:bg-accent/50"
-                              : ""
-                          } ${isReassigning ? "ring-2 ring-primary ring-inset" : ""}`}
-                          style={{
-                            borderInlineStart:
-                              shiftIndex === 0 && day.dayIndex > 0
-                                ? "2px solid var(--border)"
-                                : undefined,
-                          }}
-                          onClick={() => handleCellClick(postIndex, hourIndex)}
-                          data-testid={`cell-${postIndex}-${hourIndex}`}
-                          role="gridcell"
+                          className="absolute top-full start-0 z-30 mt-0.5 bg-popover border rounded px-2 py-1 text-xs shadow-sm whitespace-nowrap"
+                          data-testid={`reveal-name-${postIndex}-${hourIndex}`}
                         >
-                          {badge}
-
-                          {/* Reassignment dropdown (desktop only) */}
-                          {isReassigning && !isMobile && (
-                            <div
-                              className="absolute top-full start-0 z-30 mt-1 bg-popover border rounded-md shadow-lg py-1 min-w-[120px] max-h-48 overflow-y-auto"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <button
-                                className="w-full text-start px-3 py-1.5 text-xs hover:bg-accent text-muted-foreground italic"
-                                onClick={() => handleReassign(null)}
-                              >
-                                –
-                              </button>
-                              {userShiftData.map((u) => (
-                                <button
-                                  key={u.user.id}
-                                  className={`w-full text-start px-3 py-1.5 text-xs hover:bg-accent ${
-                                    assignments[postIndex]?.[hourIndex] ===
-                                    u.user.id
-                                      ? "bg-primary/10 font-medium"
-                                      : ""
-                                  }`}
-                                  onClick={() => handleReassign(u.user.id)}
-                                >
-                                  {u.user.name}
-                                </button>
-                              ))}
-                            </div>
-                          )}
+                          {fullName}
                         </div>
+                      )}
+
+                      {/* Reassignment dropdown (desktop only) */}
+                      {isReassigning && !isMobile && (
+                        <div
+                          className="absolute top-full start-0 z-30 mt-1 bg-popover border rounded-md shadow-lg py-1 min-w-[120px] max-h-48 overflow-y-auto"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            className="w-full text-start px-3 py-1.5 text-xs hover:bg-accent text-muted-foreground italic"
+                            onClick={() => handleReassign(null)}
+                          >
+                            –
+                          </button>
+                          {userShiftData.map((u) => (
+                            <button
+                              key={u.user.id}
+                              className={`w-full text-start px-3 py-1.5 text-xs hover:bg-accent ${
+                                assignments[postIndex]?.[hourIndex] ===
+                                u.user.id
+                                  ? "bg-primary/10 font-medium"
+                                  : ""
+                              }`}
+                              onClick={() => handleReassign(u.user.id)}
+                            >
+                              {u.user.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+
+                  return isMobile ? cellDiv : (
+                    <Tooltip key={cellKey}>
+                      <TooltipTrigger asChild>
+                        {cellDiv}
                       </TooltipTrigger>
                       {fullName && (
                         <TooltipContent>

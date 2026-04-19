@@ -277,7 +277,7 @@ export function ShiftInfoSettingsView({
             // Single level — centered dot with stats
             <div className="flex flex-col items-center gap-1 py-1">
               <div className="flex items-center gap-2 text-xs">
-                <div className={`w-3 h-3 rounded-full ${feasibleLevels.length === 1 ? "bg-primary" : "bg-muted-foreground/30"}`} />
+                <div className={`w-1 h-3.5 rounded-sm ${feasibleLevels.length === 1 ? "bg-primary" : "bg-muted-foreground/30"}`} />
                 <span className="text-muted-foreground whitespace-nowrap">{t("shiftsLabel", { defaultValue: "Shifts" })}: <span className="font-medium text-foreground">{levels[0].shifts}</span></span>
                 <span className="text-muted-foreground whitespace-nowrap">{t("minRest", { defaultValue: "Min. rest" })}: <span className="font-medium text-foreground">{levels[0].restBetween.toFixed(1)}h</span></span>
                 <span className="text-muted-foreground whitespace-nowrap">{t("duration")}: <span className="font-medium text-primary">{levels[0].duration.toFixed(2)}h</span></span>
@@ -307,21 +307,21 @@ export function ShiftInfoSettingsView({
                             })}`
                           : "";
                       return (
-                        <div key={i} className="relative group flex items-center justify-center w-3.5 h-3.5">
-                          <button
-                            type="button"
-                            className={`rounded-full transition-all ${
+                        <div
+                          key={i}
+                          className={`relative group flex items-center justify-center w-3.5 h-3.5 ${level.feasible ? "cursor-pointer" : "cursor-default"}`}
+                          onClick={() => {
+                            if (level.feasible) handleLevelChange(level);
+                          }}
+                        >
+                          <div
+                            className={`transition-all pointer-events-none ${
                               level.feasible
                                 ? i === selectedSliderIndex
-                                  ? "w-3.5 h-3.5 bg-primary shadow-sm"
-                                  : "w-2 h-2 bg-muted-foreground/60 hover:bg-muted-foreground hover:scale-125"
-                                : "w-2 h-2 bg-muted-foreground/20 cursor-default"
+                                  ? "w-1 h-3.5 rounded-sm bg-primary shadow-sm"
+                                  : "w-0.5 h-3 rounded-sm bg-muted-foreground/40 group-hover:bg-muted-foreground/70 group-hover:h-3.5"
+                                : "w-0.5 h-3 rounded-sm bg-muted-foreground/20"
                             }`}
-                            onClick={() => {
-                              if (level.feasible) handleLevelChange(level);
-
-                            }}
-                            disabled={!level.feasible}
                           />
                           {tooltipText && (
                             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded bg-foreground text-background text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 pointer-events-none z-20">

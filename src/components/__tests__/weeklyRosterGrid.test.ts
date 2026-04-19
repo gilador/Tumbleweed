@@ -116,3 +116,180 @@ describe("Mobile weekly grid behavior", () => {
     expect(capturedDay).toBe(3);
   });
 });
+
+/**
+ * Unit tests for handleCellClick branching logic.
+ *
+ * The component's handleCellClick function has two branches:
+ *   - Mobile: toggles revealCell (show/hide staff name), ignores unassigned
+ *   - Desktop: toggles reassignCell (open/close reassignment dropdown)
+ *
+ * We simulate the exact branching logic from WeeklyRosterGrid.tsx
+ * using the same state shape and getCellDisplay lookup.
+ */
+describe("handleCellClick branching logic", () => {
+  // --- State types matching the component ---
+  type CellCoord = { postIndex: number; hourIndex: number } | null;
+
+  // Simulated getCellDisplay based on assignments + userMap
+  function getCellDisplay(
+    assignments: (string | null)[][],
+    userMap: Map<string, string>,
+    badgeMap: Map<string, string>,
+    postIndex: number,
+    hourIndex: number
+  ): { badge: string; fullName: string } {
+    const userId = assignments[postIndex]?.[hourIndex];
+    if (!userId) return { badge: "–", fullName: "" };
+    const badge = badgeMap.get(userId) || "??";
+    const fullName = userMap.get(userId) || "";
+    return { badge, fullName };
+  }
+
+  // Simulated handleCellClick matching the component logic exactly
+  function handleCellClick(
+    isMobile: boolean,
+    postIndex: number,
+    hourIndex: number,
+    assignments: (string | null)[][],
+    userMap: Map<string, string>,
+    badgeMap: Map<string, string>,
+    revealCell: CellCoord,
+    reassignCell: CellCoord,
+  ): { revealCell: CellCoord; reassignCell: CellCoord } {
+    if (isMobile) {
+      const { fullName } = getCellDisplay(assignments, userMap, badgeMap, postIndex, hourIndex);
+      if (fullName === "") {
+        return { revealCell: null, reassignCell };
+      }
+      if (revealCell?.postIndex === postIndex && revealCell?.hourIndex === hourIndex) {
+        return { revealCell: null, reassignCell };
+      } else {
+        return { revealCell: { postIndex, hourIndex }, reassignCell };
+      }
+    }
+    if (reassignCell?.postIndex === postIndex && reassignCell?.hourIndex === hourIndex) {
+      return { revealCell, reassignCell: null };
+    } else {
+      return { revealCell, reassignCell: { postIndex, hourIndex } };
+    }
+  }
+
+  // --- Test fixtures ---
+  const userMap = new Map([
+    ["u1", "נתן חתוקה"],
+    ["u2", "דנה לוי"],
+  ]);
+  const badgeMap = new Map([
+    ["u1", "נח"],
+    ["u2", "דל"],
+  ]);
+  // Post 0: assigned(u1), unassigned(null), assigned(u2)
+  const assignments: (string | null)[][] = [["u1", null, "u2"]];
+
+  describe("mobile branch", () => {
+    const mobile = true;
+
+    it("reveals staff name when tapping an assigned cell", () => {
+      const result = handleCellClick(mobile, 0, 0, assignments, userMap, badgeMap, null, null);
+      expect(result.revealCell).toEqual({ postIndex: 0, hourIndex: 0 });
+    });
+
+    it("dismisses reveal when tapping the same cell again (toggle off)", () => {
+      const alreadyRevealed: CellCoord = { postIndex: 0, hourIndex: 0 };
+      const result = handleCellClick(mobile, 0, 0, assignments, userMap, badgeMap, alreadyRevealed, null);
+      expect(result.revealCell).toBeNull();
+    });
+
+    it("switches reveal to a different cell when tapping another assigned cell", () => {
+      const alreadyRevealed: CellCoord = { postIndex: 0, hourIndex: 0 };
+      const result = handleCellClick(mobile, 0, 2, assignments, userMap, badgeMap, alreadyRevealed, null);
+      expect(result.revealCell).toEqual({ postIndex: 0, hourIndex: 2 });
+    });
+
+    it("clears reveal when tapping an unassigned cell (guard: fullName === empty)", () => {
+      const alreadyRevealed: CellCoord = { postIndex: 0, hourIndex: 0 };
+      const result = handleCellClick(mobile, 0, 1, assignments, userMap, badgeMap, alreadyRevealed, null);
+      expect(result.revealCell).toBeNull();
+    });
+
+    it("does nothing when tapping unassigned cell with no prior reveal", () => {
+      const result = handleCellClick(mobile, 0, 1, assignments, userMap, badgeMap, null, null);
+      expect(result.revealCell).toBeNull();
+    });
+
+    it("does not modify reassignCell state", () => {
+      const existingReassign: CellCoord = { postIndex: 0, hourIndex: 2 };
+      const result = handleCellClick(mobile, 0, 0, assignments, userMap, badgeMap, null, existingReassign);
+      expect(result.reassignCell).toBe(existingReassign);
+    });
+
+    it("handles Hebrew names correctly in lookup", () => {
+      const result = handleCellClick(mobile, 0, 2, assignments, userMap, badgeMap, null, null);
+      expect(result.revealCell).toEqual({ postIndex: 0, hourIndex: 2 });
+      // Verify the underlying lookup returns the Hebrew name
+      const display = getCellDisplay(assignments, userMap, badgeMap, 0, 2);
+      expect(display.fullName).toBe("דנה לוי");
+      expect(display.badge).toBe("דל");
+    });
+  });
+
+  describe("desktop branch", () => {
+    const mobile = false;
+
+    it("opens reassignment dropdown on first click", () => {
+      const result = handleCellClick(mobile, 0, 0, assignments, userMap, badgeMap, null, null);
+      expect(result.reassignCell).toEqual({ postIndex: 0, hourIndex: 0 });
+    });
+
+    it("closes reassignment dropdown when clicking same cell (toggle off)", () => {
+      const alreadyReassigning: CellCoord = { postIndex: 0, hourIndex: 0 };
+      const result = handleCellClick(mobile, 0, 0, assignments, userMap, badgeMap, null, alreadyReassigning);
+      expect(result.reassignCell).toBeNull();
+    });
+
+    it("switches reassignment to a different cell", () => {
+      const alreadyReassigning: CellCoord = { postIndex: 0, hourIndex: 0 };
+      const result = handleCellClick(mobile, 0, 2, assignments, userMap, badgeMap, null, alreadyReassigning);
+      expect(result.reassignCell).toEqual({ postIndex: 0, hourIndex: 2 });
+    });
+
+    it("allows clicking unassigned cells (no guard — desktop shows dropdown)", () => {
+      const result = handleCellClick(mobile, 0, 1, assignments, userMap, badgeMap, null, null);
+      expect(result.reassignCell).toEqual({ postIndex: 0, hourIndex: 1 });
+    });
+
+    it("does not modify revealCell state", () => {
+      const existingReveal: CellCoord = { postIndex: 0, hourIndex: 0 };
+      const result = handleCellClick(mobile, 0, 2, assignments, userMap, badgeMap, existingReveal, null);
+      expect(result.revealCell).toBe(existingReveal);
+    });
+  });
+
+  describe("getCellDisplay helper", () => {
+    it("returns dash badge and empty name for unassigned cell", () => {
+      const display = getCellDisplay(assignments, userMap, badgeMap, 0, 1);
+      expect(display.badge).toBe("–");
+      expect(display.fullName).toBe("");
+    });
+
+    it("returns badge and full name for assigned cell", () => {
+      const display = getCellDisplay(assignments, userMap, badgeMap, 0, 0);
+      expect(display.badge).toBe("נח");
+      expect(display.fullName).toBe("נתן חתוקה");
+    });
+
+    it("returns ?? badge for unknown user ID", () => {
+      const weirdAssignments: (string | null)[][] = [["unknown-user"]];
+      const display = getCellDisplay(weirdAssignments, userMap, badgeMap, 0, 0);
+      expect(display.badge).toBe("??");
+      expect(display.fullName).toBe("");
+    });
+
+    it("returns dash for out-of-bounds index", () => {
+      const display = getCellDisplay(assignments, userMap, badgeMap, 0, 99);
+      expect(display.badge).toBe("–");
+      expect(display.fullName).toBe("");
+    });
+  });
+});

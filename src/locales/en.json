@@ -26,6 +26,8 @@
   "allAvailable": "All Available",
   "allUnavailable": "All Unavailable",
   "unavailable": "Unavailable",
+  "allDayAvailable": "All Day Available",
+  "allDayUnavailable": "All Day Unavailable",
   "unassigned": "Unassigned",
   "unassign": "Unassign",
 
@@ -62,6 +64,7 @@
   "shareDebugInfoEnable": "Enable",
   "shareDebugInfoCancel": "Cancel",
 
+  "updatePostAssignment": "Update Post Assignment",
   "shiftAssignments": "Shift Assignments",
   "shiftAdjustment": "Shift Configuration",
   "shiftInput": "Shift Input",

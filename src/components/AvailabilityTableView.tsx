@@ -483,6 +483,41 @@ export function AvailabilityTableView({
     onShowToast?.(t("availabilitySetToAllUnavailable"), "success");
   };
 
+  const toggleDayAvailability = (dayIndex: number, setAvailable: boolean) => {
+    if (
+      mode !== "availability" ||
+      !onConstraintsChange ||
+      !availabilityConstraints
+    )
+      return;
+
+    const baseConstraints =
+      optimisticLocalConstraints || availabilityConstraints;
+    if (!baseConstraints) return;
+
+    const slice = getDaySlice(hours.length, dayIndex);
+
+    const newConstraints = baseConstraints.map((postCons, pIdx) => {
+      const updated = [...postCons];
+      while (updated.length < hours.length) {
+        updated.push({
+          availability: true,
+          postID: posts[pIdx]?.id || "",
+          hourID: hours[updated.length]?.id || "",
+        });
+      }
+      return updated.map((constraint, hIndex) => {
+        if (hIndex >= slice.start && hIndex < slice.end) {
+          return { ...constraint, availability: setAvailable };
+        }
+        return constraint;
+      });
+    });
+
+    setOptimisticLocalConstraints(newConstraints);
+    onConstraintsChange(newConstraints);
+  };
+
   // Reset optimistic state when props change
   useEffect(() => {
     setOptimisticLocalConstraints(null);
@@ -556,25 +591,49 @@ export function AvailabilityTableView({
           {/* Normal availability table - modify with CSS for edit mode */}
           {mode === "availability" && (
             <div className="p-2 relative">
-              {isWeekly && (
-                <div className="mb-2 space-y-2">
-                  <DayTabStrip
-                    startDate={startDate || getTodayISO()}
-                    selectedDay={selectedDay}
-                    onDayChange={setSelectedDay}
-                    dayIndicators={dayIndicators}
-                  />
-                  <AvailabilityCopyBar
-                    startDate={startDate || getTodayISO()}
-                    sourceDayIndex={selectedDay}
-                    onCopy={handleCopyAvailability}
-                  />
-                </div>
-              )}
               <div
                 className="grid gap-1 w-full grid-cols-[max-content_repeat(var(--hours),1fr)]"
                 style={{ "--hours": displayHours.length } as React.CSSProperties}
               >
+                {/* Day tab strip row - aligned with hour columns */}
+                {isWeekly && (
+                  <>
+                    <div />
+                    <div className="mb-1 space-y-2" style={{ gridColumn: "2 / -1" }}>
+                      <DayTabStrip
+                        startDate={startDate || getTodayISO()}
+                        selectedDay={selectedDay}
+                        onDayChange={setSelectedDay}
+                        dayIndicators={dayIndicators}
+                      />
+                      <div className="flex items-center gap-2">
+                        <AvailabilityCopyBar
+                          startDate={startDate || getTodayISO()}
+                          sourceDayIndex={selectedDay}
+                          onCopy={handleCopyAvailability}
+                        />
+                        {availabilityConstraints && (
+                          <div className="flex gap-1">
+                            <Button
+                              onClick={() => toggleDayAvailability(selectedDay, true)}
+                              variant="outline"
+                              className="h-7 text-[11px] px-2 rounded-md bg-background border-border hover:bg-accent"
+                            >
+                              {t("allDayAvailable")}
+                            </Button>
+                            <Button
+                              onClick={() => toggleDayAvailability(selectedDay, false)}
+                              variant="outline"
+                              className="h-7 text-[11px] px-2 rounded-md bg-background border-border hover:bg-accent"
+                            >
+                              {t("allDayUnavailable")}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
                 {/* Header Row */}
                 <div className="py-2 ps-3 pe-2 flex justify-start items-center">
                   <div className={colors.text.default}>{t("post")}</div>
@@ -711,20 +770,24 @@ export function AvailabilityTableView({
           {/* Show assignment table - always present in DOM */}
           {mode === "assignments" && (
             <div className="py-2 pe-2 ps-6 relative">
-              {isWeekly && (
-                <div className="mb-2">
-                  <DayTabStrip
-                    startDate={startDate || getTodayISO()}
-                    selectedDay={selectedDay}
-                    onDayChange={setSelectedDay}
-                    highlightedDays={assignmentHighlightedDays}
-                  />
-                </div>
-              )}
               <div
                 className="grid gap-1 w-full grid-cols-[max-content_repeat(var(--hours),1fr)]"
                 style={{ "--hours": displayHours.length } as React.CSSProperties}
               >
+                {/* Day tab strip row - aligned with hour columns */}
+                {isWeekly && (
+                  <>
+                    <div />
+                    <div className="mb-1" style={{ gridColumn: "2 / -1" }}>
+                      <DayTabStrip
+                        startDate={startDate || getTodayISO()}
+                        selectedDay={selectedDay}
+                        onDayChange={setSelectedDay}
+                        highlightedDays={assignmentHighlightedDays}
+                      />
+                    </div>
+                  </>
+                )}
                 {/* Header Row */}
                 <div className="py-2 ps-3 pe-2 flex justify-start items-center">
                   <div className={colors.text.default}>{t("post")}</div>
