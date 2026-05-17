@@ -12,6 +12,16 @@ type CoreEventMap = {
   "pdf-downloaded": { type: "roster" | "staff"; rosterCount: number };
   "whatsapp-shared": { type: "roster" | "staff" };
   "schedule-view-mode-changed": { from: "24h" | "7d"; to: "24h" | "7d" };
+  "intensity-change": { from: number; to: number; surface: string; confirmed: boolean };
+  "intensity-undo-click": { from: number; to: number; surface: string };
+  "intensity-confirm-cancel": { from: number; to: number; surface: string };
+  "context-menu-open": { kind: string };
+  "context-menu-action": { kind: string; action: string };
+  "multi-select-start": { kind: string; entry: string };
+  "multi-select-cancel": { kind: string; via: string };
+  "post-delete-bulk": { count: number };
+  "user-delete-bulk": { count: number };
+  "reset-availability": { userCount: number };
 };
 
 type CoreEventName = keyof CoreEventMap;
