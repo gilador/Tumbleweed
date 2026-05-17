@@ -1,0 +1,726 @@
+{
+  "_comment": "Captured snapshot of PersistedShiftData (see packages/core/src/stores/shiftStore.ts). If the schema changes (or migrateLegacyState rotates), recapture via tests/e2e/_capture-fixture.spec.ts. Used by mobile-weekly-view.spec.ts to seed deterministic 7D + assignments state and skip the LP optimizer.",
+  "rosters": [
+    {
+      "id": "default-roster",
+      "name": "",
+      "posts": [
+        {
+          "id": "post-2",
+          "value": "עמדה 2"
+        },
+        {
+          "id": "post-1",
+          "value": "עמדה 1"
+        }
+      ],
+      "hours": [
+        {
+          "id": "d0-h0",
+          "value": "0·08:00"
+        },
+        {
+          "id": "d1-h0",
+          "value": "1·08:00"
+        },
+        {
+          "id": "d2-h0",
+          "value": "2·08:00"
+        },
+        {
+          "id": "d3-h0",
+          "value": "3·08:00"
+        },
+        {
+          "id": "d4-h0",
+          "value": "4·08:00"
+        },
+        {
+          "id": "d5-h0",
+          "value": "5·08:00"
+        },
+        {
+          "id": "d6-h0",
+          "value": "6·08:00"
+        }
+      ],
+      "assignments": [
+        [
+          "worker-1",
+          "worker-2",
+          "worker-1",
+          "worker-2",
+          "worker-1",
+          "worker-2",
+          "worker-1"
+        ],
+        [
+          "worker-1777744958297",
+          "worker-1777744958066",
+          "worker-1777744958297",
+          "worker-1777744958066",
+          "worker-1777744958297",
+          "worker-1777744958066",
+          "worker-1777744958297"
+        ]
+      ],
+      "manuallyEditedSlots": {},
+      "customCellDisplayNames": {},
+      "scheduleMode": "7d",
+      "startTime": "08:00",
+      "endTime": "18:00",
+      "startDate": "2026-05-02",
+      "cachedWeeklyState": null
+    }
+  ],
+  "activeRosterId": "default-roster",
+  "userShiftData": [
+    {
+      "user": {
+        "id": "worker-1777744958297",
+        "name": "Member 4"
+      },
+      "constraints": [
+        [
+          {
+            "postID": "post-2",
+            "hourID": "d0-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-2",
+            "hourID": "d1-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-2",
+            "hourID": "d2-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-2",
+            "hourID": "d3-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-2",
+            "hourID": "d4-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-2",
+            "hourID": "d5-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-2",
+            "hourID": "d6-h0",
+            "availability": true
+          }
+        ],
+        [
+          {
+            "postID": "post-1",
+            "hourID": "d0-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-1",
+            "hourID": "d1-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-1",
+            "hourID": "d2-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-1",
+            "hourID": "d3-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-1",
+            "hourID": "d4-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-1",
+            "hourID": "d5-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-1",
+            "hourID": "d6-h0",
+            "availability": true
+          }
+        ]
+      ],
+      "constraintsByRoster": {
+        "default-roster": [
+          [
+            {
+              "postID": "post-2",
+              "hourID": "d0-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-2",
+              "hourID": "d1-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-2",
+              "hourID": "d2-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-2",
+              "hourID": "d3-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-2",
+              "hourID": "d4-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-2",
+              "hourID": "d5-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-2",
+              "hourID": "d6-h0",
+              "availability": true
+            }
+          ],
+          [
+            {
+              "postID": "post-1",
+              "hourID": "d0-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-1",
+              "hourID": "d1-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-1",
+              "hourID": "d2-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-1",
+              "hourID": "d3-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-1",
+              "hourID": "d4-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-1",
+              "hourID": "d5-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-1",
+              "hourID": "d6-h0",
+              "availability": true
+            }
+          ]
+        ]
+      },
+      "totalAssignments": 0
+    },
+    {
+      "user": {
+        "id": "worker-1777744958066",
+        "name": "Member 3"
+      },
+      "constraints": [
+        [
+          {
+            "postID": "post-2",
+            "hourID": "d0-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-2",
+            "hourID": "d1-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-2",
+            "hourID": "d2-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-2",
+            "hourID": "d3-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-2",
+            "hourID": "d4-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-2",
+            "hourID": "d5-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-2",
+            "hourID": "d6-h0",
+            "availability": true
+          }
+        ],
+        [
+          {
+            "postID": "post-1",
+            "hourID": "d0-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-1",
+            "hourID": "d1-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-1",
+            "hourID": "d2-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-1",
+            "hourID": "d3-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-1",
+            "hourID": "d4-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-1",
+            "hourID": "d5-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-1",
+            "hourID": "d6-h0",
+            "availability": true
+          }
+        ]
+      ],
+      "constraintsByRoster": {
+        "default-roster": [
+          [
+            {
+              "postID": "post-2",
+              "hourID": "d0-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-2",
+              "hourID": "d1-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-2",
+              "hourID": "d2-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-2",
+              "hourID": "d3-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-2",
+              "hourID": "d4-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-2",
+              "hourID": "d5-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-2",
+              "hourID": "d6-h0",
+              "availability": true
+            }
+          ],
+          [
+            {
+              "postID": "post-1",
+              "hourID": "d0-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-1",
+              "hourID": "d1-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-1",
+              "hourID": "d2-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-1",
+              "hourID": "d3-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-1",
+              "hourID": "d4-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-1",
+              "hourID": "d5-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-1",
+              "hourID": "d6-h0",
+              "availability": true
+            }
+          ]
+        ]
+      },
+      "totalAssignments": 0
+    },
+    {
+      "user": {
+        "id": "worker-2",
+        "name": "עובד 2"
+      },
+      "constraints": [
+        [
+          {
+            "postID": "post-2",
+            "hourID": "d0-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-2",
+            "hourID": "d1-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-2",
+            "hourID": "d2-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-2",
+            "hourID": "d3-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-2",
+            "hourID": "d4-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-2",
+            "hourID": "d5-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-2",
+            "hourID": "d6-h0",
+            "availability": true
+          }
+        ],
+        [
+          {
+            "postID": "post-1",
+            "hourID": "d0-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-1",
+            "hourID": "d1-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-1",
+            "hourID": "d2-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-1",
+            "hourID": "d3-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-1",
+            "hourID": "d4-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-1",
+            "hourID": "d5-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-1",
+            "hourID": "d6-h0",
+            "availability": true
+          }
+        ]
+      ],
+      "constraintsByRoster": {
+        "default-roster": [
+          [
+            {
+              "postID": "post-2",
+              "hourID": "d0-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-2",
+              "hourID": "d1-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-2",
+              "hourID": "d2-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-2",
+              "hourID": "d3-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-2",
+              "hourID": "d4-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-2",
+              "hourID": "d5-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-2",
+              "hourID": "d6-h0",
+              "availability": true
+            }
+          ],
+          [
+            {
+              "postID": "post-1",
+              "hourID": "d0-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-1",
+              "hourID": "d1-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-1",
+              "hourID": "d2-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-1",
+              "hourID": "d3-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-1",
+              "hourID": "d4-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-1",
+              "hourID": "d5-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-1",
+              "hourID": "d6-h0",
+              "availability": true
+            }
+          ]
+        ]
+      },
+      "totalAssignments": 0
+    },
+    {
+      "user": {
+        "id": "worker-1",
+        "name": "עובד 1"
+      },
+      "constraints": [
+        [
+          {
+            "postID": "post-2",
+            "hourID": "d0-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-2",
+            "hourID": "d1-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-2",
+            "hourID": "d2-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-2",
+            "hourID": "d3-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-2",
+            "hourID": "d4-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-2",
+            "hourID": "d5-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-2",
+            "hourID": "d6-h0",
+            "availability": true
+          }
+        ],
+        [
+          {
+            "postID": "post-1",
+            "hourID": "d0-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-1",
+            "hourID": "d1-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-1",
+            "hourID": "d2-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-1",
+            "hourID": "d3-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-1",
+            "hourID": "d4-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-1",
+            "hourID": "d5-h0",
+            "availability": true
+          },
+          {
+            "postID": "post-1",
+            "hourID": "d6-h0",
+            "availability": true
+          }
+        ]
+      ],
+      "constraintsByRoster": {
+        "default-roster": [
+          [
+            {
+              "postID": "post-2",
+              "hourID": "d0-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-2",
+              "hourID": "d1-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-2",
+              "hourID": "d2-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-2",
+              "hourID": "d3-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-2",
+              "hourID": "d4-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-2",
+              "hourID": "d5-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-2",
+              "hourID": "d6-h0",
+              "availability": true
+            }
+          ],
+          [
+            {
+              "postID": "post-1",
+              "hourID": "d0-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-1",
+              "hourID": "d1-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-1",
+              "hourID": "d2-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-1",
+              "hourID": "d3-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-1",
+              "hourID": "d4-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-1",
+              "hourID": "d5-h0",
+              "availability": true
+            },
+            {
+              "postID": "post-1",
+              "hourID": "d6-h0",
+              "availability": true
+            }
+          ]
+        ]
+      },
+      "totalAssignments": 0
+    }
+  ],
+  "hasInitialized": true,
+  "selectedShiftCount": 1,
+  "optimizationSignature": "{\"userShiftData\":[{\"user\":{\"id\":\"worker-1777744958297\",\"name\":\"Member 4\"},\"constraints\":[[{\"postID\":\"post-2\",\"hourID\":\"d0-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d1-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d2-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d3-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d4-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d5-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d6-h0\",\"availability\":true}],[{\"postID\":\"post-1\",\"hourID\":\"d0-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d1-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d2-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d3-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d4-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d5-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d6-h0\",\"availability\":true}]],\"constraintsByRoster\":{\"default-roster\":[[{\"postID\":\"post-2\",\"hourID\":\"d0-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d1-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d2-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d3-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d4-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d5-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d6-h0\",\"availability\":true}],[{\"postID\":\"post-1\",\"hourID\":\"d0-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d1-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d2-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d3-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d4-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d5-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d6-h0\",\"availability\":true}]]},\"totalAssignments\":0},{\"user\":{\"id\":\"worker-1777744958066\",\"name\":\"Member 3\"},\"constraints\":[[{\"postID\":\"post-2\",\"hourID\":\"d0-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d1-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d2-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d3-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d4-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d5-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d6-h0\",\"availability\":true}],[{\"postID\":\"post-1\",\"hourID\":\"d0-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d1-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d2-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d3-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d4-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d5-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d6-h0\",\"availability\":true}]],\"constraintsByRoster\":{\"default-roster\":[[{\"postID\":\"post-2\",\"hourID\":\"d0-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d1-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d2-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d3-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d4-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d5-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d6-h0\",\"availability\":true}],[{\"postID\":\"post-1\",\"hourID\":\"d0-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d1-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d2-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d3-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d4-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d5-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d6-h0\",\"availability\":true}]]},\"totalAssignments\":0},{\"user\":{\"id\":\"worker-2\",\"name\":\"עובד 2\"},\"constraints\":[[{\"postID\":\"post-2\",\"hourID\":\"d0-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d1-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d2-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d3-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d4-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d5-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d6-h0\",\"availability\":true}],[{\"postID\":\"post-1\",\"hourID\":\"d0-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d1-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d2-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d3-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d4-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d5-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d6-h0\",\"availability\":true}]],\"constraintsByRoster\":{\"default-roster\":[[{\"postID\":\"post-2\",\"hourID\":\"d0-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d1-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d2-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d3-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d4-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d5-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d6-h0\",\"availability\":true}],[{\"postID\":\"post-1\",\"hourID\":\"d0-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d1-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d2-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d3-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d4-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d5-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d6-h0\",\"availability\":true}]]},\"totalAssignments\":0},{\"user\":{\"id\":\"worker-1\",\"name\":\"עובד 1\"},\"constraints\":[[{\"postID\":\"post-2\",\"hourID\":\"d0-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d1-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d2-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d3-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d4-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d5-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d6-h0\",\"availability\":true}],[{\"postID\":\"post-1\",\"hourID\":\"d0-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d1-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d2-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d3-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d4-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d5-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d6-h0\",\"availability\":true}]],\"constraintsByRoster\":{\"default-roster\":[[{\"postID\":\"post-2\",\"hourID\":\"d0-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d1-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d2-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d3-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d4-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d5-h0\",\"availability\":true},{\"postID\":\"post-2\",\"hourID\":\"d6-h0\",\"availability\":true}],[{\"postID\":\"post-1\",\"hourID\":\"d0-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d1-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d2-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d3-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d4-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d5-h0\",\"availability\":true},{\"postID\":\"post-1\",\"hourID\":\"d6-h0\",\"availability\":true}]]},\"totalAssignments\":0}],\"posts\":[{\"id\":\"post-2\",\"value\":\"עמדה 2\"},{\"id\":\"post-1\",\"value\":\"עמדה 1\"}],\"hours\":[{\"id\":\"d0-h0\",\"value\":\"0·08:00\"},{\"id\":\"d1-h0\",\"value\":\"1·08:00\"},{\"id\":\"d2-h0\",\"value\":\"2·08:00\"},{\"id\":\"d3-h0\",\"value\":\"3·08:00\"},{\"id\":\"d4-h0\",\"value\":\"4·08:00\"},{\"id\":\"d5-h0\",\"value\":\"5·08:00\"},{\"id\":\"d6-h0\",\"value\":\"6·08:00\"}],\"startTime\":\"08:00\",\"endTime\":\"18:00\",\"selectedShiftCount\":1}"
+}

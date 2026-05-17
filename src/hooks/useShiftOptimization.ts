@@ -5,6 +5,29 @@ import { shiftState, getActiveRosterFromState, updateRosterById } from "../store
 import { optimizeAllRosters, RosterInput } from "../service/shiftOptimizedService";
 import { UserShiftData } from "../models";
 
+// Formats an optimizer duration (ms) into a human-readable, RTL-safe
+// LTR atomic token suitable for interpolating into Hebrew/English
+// success copy. Tiers:
+//   0–999ms   →  "Nms"
+//   1–59.9s   →  "N.Ns"  (one decimal)
+//   60s+      →  "Nm Ns"  (re-distributes so seconds is never 60)
+//   negative  →  clamped to "0ms"
+export function formatOptimizationDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return "0ms";
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  if (ms < 60000) {
+    const s = ms / 1000;
+    return `${s.toFixed(1)}s`;
+  }
+  let minutes = Math.floor(ms / 60000);
+  let seconds = Math.round((ms - minutes * 60000) / 1000);
+  if (seconds === 60) {
+    minutes += 1;
+    seconds = 0;
+  }
+  return `${minutes}m ${seconds}s`;
+}
+
 function buildSignature(state: { userShiftData: UserShiftData[]; posts: any[]; hours: any[]; startTime: string; endTime: string; selectedShiftCount: number | null }): string {
   return JSON.stringify({
     userShiftData: state.userShiftData,
