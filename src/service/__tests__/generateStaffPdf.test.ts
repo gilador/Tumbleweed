@@ -1,5 +1,5 @@
 import type { RosterState } from "@/models";
-import { processRtl } from "@/service/pdf/rtlText";
+import { processRtl, shapeHebrew } from "@/service/pdf/rtlText";
 
 // Capture calls to doc.text()
 const textCalls: [string, number, number][] = [];
@@ -112,5 +112,38 @@ describe("generateStaffPdf (Hebrew)", () => {
 
     expect(result).toBeInstanceOf(Blob);
     expect(mockDoc.output).toHaveBeenCalledWith("blob");
+  });
+});
+
+describe("generateStaffPdf EN locale", () => {
+  it("shapes Hebrew post names through shapeHebrew in en locale", async () => {
+    await generateStaffPdf({
+      staffName: "Danny",
+      staffId: "staff-1",
+      rosters: [baseRoster], // post.value === "בר"
+      userShiftData: [],
+      locale: "en-US",
+    });
+
+    expect(autoTableCalls.length).toBeGreaterThan(0);
+    const opts = autoTableCalls[0] as { head: string[][]; body: string[][] };
+    // en + 24h: head is [[shape("Post"), shape("Time")]] === ["Post", "Time"]
+    expect(opts.head[0]).toEqual(["Post", "Time"]);
+    // body row: [shape(post), shape(time)] — post is "בר" → "רב"
+    const flatBody = opts.body.flat();
+    expect(flatBody).toContain(shapeHebrew("בר"));
+  });
+
+  it("shapes Hebrew staff name in title in en locale (no run-order reversal)", async () => {
+    await generateStaffPdf({
+      staffName: "דני",
+      staffId: "staff-1",
+      rosters: [baseRoster],
+      userShiftData: [],
+      locale: "en-US",
+    });
+
+    // First text() call is the title (staff name)
+    expect(textCalls[0][0]).toBe(shapeHebrew("דני"));
   });
 });

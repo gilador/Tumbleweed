@@ -1,29 +1,33 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, devices, Page } from "@playwright/test";
+import { installInitScript, waitForMobileApp } from "./helpers";
+
+test.use({ ...devices["Pixel 7"] });
+
+// Schedule Mode card has buttons "24H" / "7D". When 7D is active a date input
+// (input[type="date"]) appears under "Starting date".
+
+function scheduleModeCard(page: Page) {
+  return page
+    .locator(".rounded-lg.border")
+    .filter({ has: page.getByRole("heading", { name: /^Schedule Mode$/ }) });
+}
 
 test.describe("Mobile Weekly Roster", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto("/tumbleweed/");
-    await expect(page.locator("text=Tumbleweed").first()).toBeVisible({
-      timeout: 10000,
-    });
+    await installInitScript(page);
+    await waitForMobileApp(page);
   });
 
   test("shows schedule mode toggle in mobile settings", async ({ page }) => {
-    await expect(page.getByText("Schedule Mode")).toBeVisible();
-    const scheduleSection = page.locator("text=Schedule Mode").locator("..");
-    await expect(
-      scheduleSection.getByRole("button", { name: "24H" })
-    ).toBeVisible();
-    await expect(
-      scheduleSection.getByRole("button", { name: "7D" })
-    ).toBeVisible();
+    const card = scheduleModeCard(page);
+    await expect(card.getByRole("button", { name: /^24H$/ })).toBeVisible();
+    await expect(card.getByRole("button", { name: /^7D$/ })).toBeVisible();
   });
 
   test("can switch to 7D mode and see date picker", async ({ page }) => {
-    const scheduleSection = page.locator("text=Schedule Mode").locator("..");
-    await scheduleSection.getByRole("button", { name: "7D" }).click();
+    const card = scheduleModeCard(page);
+    await card.getByRole("button", { name: /^7D$/ }).click();
 
-    // Date picker should appear
     await expect(page.getByText("Starting date")).toBeVisible();
     await expect(page.locator('input[type="date"]')).toBeVisible();
   });
@@ -31,29 +35,23 @@ test.describe("Mobile Weekly Roster", () => {
   test("staff preserved when switching 24H to 7D in mobile", async ({
     page,
   }) => {
-    // Switch to 7D in settings (already on settings tab)
-    const scheduleSection = page.locator("text=Schedule Mode").locator("..");
-    await scheduleSection.getByRole("button", { name: "7D" }).click();
+    const card = scheduleModeCard(page);
+    await card.getByRole("button", { name: /^7D$/ }).click();
 
-    // Navigate to staff tab via bottom tab bar
-    await page.locator("text=Staff").last().click();
-    await page.waitForTimeout(500);
+    await page.getByRole("navigation").getByRole("button", { name: "Staff" }).click();
+    await expect(page.getByRole("heading", { name: /^Staff$/ })).toBeVisible();
 
-    // Staff should still be there (not empty state)
+    // Staff list should not show empty state.
     await expect(page.getByText("No staff yet")).not.toBeVisible();
   });
 
   test("can switch back from 7D to 24H in mobile", async ({ page }) => {
-    const scheduleSection = page.locator("text=Schedule Mode").locator("..");
+    const card = scheduleModeCard(page);
 
-    // Switch to 7D first
-    await scheduleSection.getByRole("button", { name: "7D" }).click();
+    await card.getByRole("button", { name: /^7D$/ }).click();
     await expect(page.getByText("Starting date")).toBeVisible();
 
-    // Switch back to 24H
-    await scheduleSection.getByRole("button", { name: "24H" }).click();
-
-    // Date picker should disappear
+    await card.getByRole("button", { name: /^24H$/ }).click();
     await expect(page.getByText("Starting date")).not.toBeVisible();
   });
 });

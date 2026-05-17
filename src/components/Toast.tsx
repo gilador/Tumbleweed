@@ -9,6 +9,8 @@ export interface ToastProps {
   duration?: number;
   onClose: () => void;
   highlightText?: string;
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 export function Toast({
@@ -17,6 +19,8 @@ export function Toast({
   duration = 3000,
   onClose,
   highlightText,
+  actionLabel,
+  onAction,
 }: ToastProps) {
   const { t } = useTranslation();
   const [isVisible, setIsVisible] = useState(false);
@@ -40,6 +44,11 @@ export function Toast({
     setTimeout(onClose, 300);
   };
 
+  const handleAction = () => {
+    if (onAction) onAction();
+    handleClose();
+  };
+
   const renderMessage = () => {
     if (!highlightText || !message.includes(highlightText)) {
       return <span className="flex-1 text-sm font-medium">{message}</span>;
@@ -52,7 +61,7 @@ export function Toast({
           <span key={index}>
             {part}
             {index < parts.length - 1 && (
-              <span className={`${colors.highlightText.default} font-semibold`}>
+              <span className={`${colors.highlightText.default} font-semibold`} dir="ltr">
                 {highlightText}
               </span>
             )}
@@ -69,6 +78,8 @@ export function Toast({
     return "bg-black text-white";
   };
 
+  const showAction = Boolean(actionLabel && onAction);
+
   return (
     <div
       className={`fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50 transition-all duration-300 ${
@@ -79,6 +90,14 @@ export function Toast({
         className={`${getTypeStyles()} px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 min-w-[300px] max-w-[500px]`}
       >
         {renderMessage()}
+        {showAction && (
+          <button
+            onClick={handleAction}
+            className="flex-shrink-0 underline font-semibold text-sm hover:opacity-80 transition-opacity min-h-[44px] min-w-[44px] px-2"
+          >
+            {actionLabel}
+          </button>
+        )}
         <button
           onClick={handleClose}
           className="flex-shrink-0 p-1 rounded hover:bg-black/20 transition-colors"
@@ -98,6 +117,9 @@ export interface ToastManagerProps {
     type?: "success" | "error" | "info";
     duration?: number;
     highlightText?: string;
+    actionLabel?: string;
+    onAction?: () => void;
+    onClose?: () => void;
   }>;
   onRemoveToast: (id: string) => void;
 }
@@ -112,7 +134,12 @@ export function ToastManager({ toasts, onRemoveToast }: ToastManagerProps) {
           type={toast.type}
           duration={toast.duration}
           highlightText={toast.highlightText}
-          onClose={() => onRemoveToast(toast.id)}
+          actionLabel={toast.actionLabel}
+          onAction={toast.onAction}
+          onClose={() => {
+            if (toast.onClose) toast.onClose();
+            onRemoveToast(toast.id);
+          }}
         />
       ))}
     </>

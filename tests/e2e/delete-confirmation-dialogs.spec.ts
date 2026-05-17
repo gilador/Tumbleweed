@@ -1,279 +1,240 @@
 import { test, expect } from "@playwright/test";
+import {
+  STAFF_ROW,
+  installInitScript,
+  waitForApp,
+  clickStaffRow,
+  postNameLocators,
+  clickPostRow,
+  bulkRegion,
+} from "./helpers";
+
+// All four destructive confirmations now share the shadcn Dialog pattern:
+//   - Bulk-delete (staff or posts) confirms via shadcn Dialog rendered by
+//     BulkSelectionBar — the confirm copy is `deleteStaffConfirm` /
+//     `deletePostsConfirm` ("Are you sure you want to delete N staff
+//     member(s)?" / "...N post(s)?"), with No / "Yes, please!" CTAs.
+//   - Single-staff delete (hover-trash on the staff row) opens a shadcn
+//     Dialog with title `deleteUserConfirmSingle` ("Delete this teammate?").
+//   - Single-post delete (hover-trash on a PostHeadRow) opens a shadcn
+//     Dialog with title `deletePostConfirmSingle` ("Delete this position?").
+
+test.beforeEach(async ({ page }) => {
+  await installInitScript(page);
+});
 
 test.describe("Delete Confirmation Dialogs", () => {
-  test("staff member deletion shows confirmation dialog with correct content", async ({
+  test("bulk staff delete shows shadcn dialog with correct singular copy", async ({
     page,
   }) => {
-    await page.goto("/");
+    await waitForApp(page);
+    test.skip(
+      (await page.locator(STAFF_ROW).count()) < 2,
+      "need at least 2 staff rows to enter multi"
+    );
 
-    // Wait for app to load
-    await expect(page.getByRole("main")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Staff" })).toBeVisible();
+    // Enter multi-select via 2 rows, then deselect one to leave a single
+    // selected entry in the bulk bar.
+    await clickStaffRow(page, 0);
+    await clickStaffRow(page, 1);
+    const region = bulkRegion(page);
+    await expect(region).toBeVisible();
+    // Toggle row 1 off → 1 selected remaining.
+    await clickStaffRow(page, 1);
+    await expect(page.getByText(/^1 selected$/).first()).toBeVisible();
 
-    // Enter edit mode
-    const editToggleButton = page
-      .getByRole("button", { name: "Enter edit mode" })
-      .first();
-    await expect(editToggleButton).toBeVisible();
-    await editToggleButton.click();
+    // Trash button in the bar is labeled with the count "1".
+    await region.locator("button").filter({ hasText: "1" }).first().click();
 
-    // Wait for edit mode to activate
-    await expect(page.getByRole("button", { name: "Add user" })).toBeVisible();
-
-    // Check a single staff member
-    const firstStaffMember = page
-      .locator('[data-testid="staff-member"]')
-      .first();
-    const checkbox = firstStaffMember.getByRole("checkbox");
-    await checkbox.click();
-    await expect(checkbox).toBeChecked();
-
-    // Click delete button
-    const deleteButton = page.getByRole("button", {
-      name: "Delete selected users",
-    });
-    await deleteButton.click();
-
-    // Verify dialog appears with correct content
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
-
-    // Check title for single staff member
     await expect(
-      page.getByText("Are you sure you want to delete 1 staff member?")
+      dialog.getByText(/Are you sure you want to delete 1 staff member/i)
+    ).toBeVisible();
+    await expect(dialog.getByText(/Once deleted, it can't be undone/i)).toBeVisible();
+
+    await expect(dialog.getByRole("button", { name: /^No$/i })).toBeVisible();
+    await expect(
+      dialog.getByRole("button", { name: /^Yes, please!$/i })
     ).toBeVisible();
 
-    // Check description
-    await expect(
-      page.getByText("Once deleted, it can't be undone.")
-    ).toBeVisible();
-
-    // Check CTAs
-    const noButton = page.getByRole("button", { name: "No" });
-    const yesButton = page.getByRole("button", { name: "Yes, please!" });
-    await expect(noButton).toBeVisible();
-    await expect(yesButton).toBeVisible();
-
-    // Test "No" button cancels deletion
-    await noButton.click();
+    const initialCount = await page.locator(STAFF_ROW).count();
+    await dialog.getByRole("button", { name: /^No$/i }).click();
     await expect(dialog).not.toBeVisible();
-
-    // Verify staff member is still there
-    await expect(checkbox).toBeChecked();
-
-    // Exit edit mode
-    await editToggleButton.click();
+    await expect(page.locator(STAFF_ROW)).toHaveCount(initialCount);
   });
 
-  test("multiple staff members deletion shows correct plural form", async ({
+  test("bulk staff delete shows correct plural copy for >1", async ({
     page,
   }) => {
-    await page.goto("/");
+    await waitForApp(page);
+    test.skip(
+      (await page.locator(STAFF_ROW).count()) < 2,
+      "need at least 2 staff rows"
+    );
 
-    // Wait for app to load
-    await expect(page.getByRole("main")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Staff" })).toBeVisible();
+    await clickStaffRow(page, 0);
+    await clickStaffRow(page, 1);
 
-    // Enter edit mode
-    const editToggleButton = page
-      .getByRole("button", { name: "Enter edit mode" })
-      .first();
-    await editToggleButton.click();
+    const region = bulkRegion(page);
+    await region.locator("button").filter({ hasText: "2" }).first().click();
 
-    // Wait for edit mode to activate
-    await expect(page.getByRole("button", { name: "Add user" })).toBeVisible();
-
-    // Check multiple staff members
-    const staffMembers = page.locator('[data-testid="staff-member"]');
-    const firstCheckbox = staffMembers.nth(0).getByRole("checkbox");
-    const secondCheckbox = staffMembers.nth(1).getByRole("checkbox");
-
-    await firstCheckbox.click();
-    await secondCheckbox.click();
-
-    // Click delete button
-    const deleteButton = page.getByRole("button", {
-      name: "Delete selected users",
-    });
-    await deleteButton.click();
-
-    // Verify dialog appears with plural form
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
-
-    // Check title for multiple staff members
     await expect(
-      page.getByText("Are you sure you want to delete 2 staff members?")
+      dialog.getByText(/Are you sure you want to delete 2 staff member/i)
     ).toBeVisible();
 
-    // Test "Yes, please!" button confirms deletion
-    const yesButton = page.getByRole("button", { name: "Yes, please!" });
-    await yesButton.click();
-
-    // Wait for deletion to complete
+    await dialog.getByRole("button", { name: /^Yes, please!$/i }).click();
     await expect(dialog).not.toBeVisible();
-
-    // Exit edit mode
-    await editToggleButton.click();
   });
 
-  test("post deletion shows confirmation dialog with correct content", async ({
+  test("bulk post delete shows shadcn dialog with correct singular copy", async ({
     page,
   }) => {
-    await page.goto("/");
+    await waitForApp(page);
 
-    // Wait for app to load
-    await expect(page.getByRole("main")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Staff" })).toBeVisible();
+    test.skip(
+      (await postNameLocators(page).count()) < 1,
+      "need at least 1 post"
+    );
 
-    // Enter edit mode
-    const editToggleButton = page
-      .getByRole("button", { name: "Enter edit mode" })
-      .first();
-    await editToggleButton.click();
+    await clickPostRow(page, 0);
+    const region = bulkRegion(page);
+    await expect(region).toBeVisible();
 
-    // Wait for edit mode to activate
-    await expect(page.getByRole("button", { name: "Add user" })).toBeVisible();
+    await region.locator("button").filter({ hasText: "1" }).first().click();
 
-    // Find and check a post in the assignments section
-    const assignmentsSection = page
-      .locator('text="Shift Assignments"')
-      .locator("..")
-      .locator("..");
-
-    const postCheckboxes = assignmentsSection.getByRole("checkbox");
-    await expect(postCheckboxes.first()).toBeVisible();
-    await postCheckboxes.first().click();
-
-    // Click delete posts button
-    const deletePostButton = page.getByRole("button", {
-      name: "Delete selected posts",
-    });
-    await deletePostButton.click();
-
-    // Verify dialog appears with correct content
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
-
-    // Check title for single post
     await expect(
-      page.getByText("Are you sure you want to delete 1 post?")
+      dialog.getByText(/Are you sure you want to delete 1 post/i)
+    ).toBeVisible();
+    await expect(dialog.getByText(/Once deleted, it can't be undone/i)).toBeVisible();
+
+    await expect(dialog.getByRole("button", { name: /^No$/i })).toBeVisible();
+    await expect(
+      dialog.getByRole("button", { name: /^Yes, please!$/i })
     ).toBeVisible();
 
-    // Check description
-    await expect(
-      page.getByText("Once deleted, it can't be undone.")
-    ).toBeVisible();
-
-    // Check CTAs
-    const noButton = page.getByRole("button", { name: "No" });
-    const yesButton = page.getByRole("button", { name: "Yes, please!" });
-    await expect(noButton).toBeVisible();
-    await expect(yesButton).toBeVisible();
-
-    // Test "No" button cancels deletion
-    await noButton.click();
+    await dialog.getByRole("button", { name: /^No$/i }).click();
     await expect(dialog).not.toBeVisible();
-
-    // Exit edit mode
-    await editToggleButton.click();
   });
 
-  test("multiple posts deletion shows correct plural form", async ({
-    page,
-  }) => {
-    await page.goto("/");
+  test("bulk post delete shows plural copy for >1", async ({ page }) => {
+    await waitForApp(page);
 
-    // Wait for app to load
-    await expect(page.getByRole("main")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Staff" })).toBeVisible();
+    test.skip(
+      (await postNameLocators(page).count()) < 2,
+      "need at least 2 posts"
+    );
 
-    // Enter edit mode
-    const editToggleButton = page
-      .getByRole("button", { name: "Enter edit mode" })
-      .first();
-    await editToggleButton.click();
+    await clickPostRow(page, 0);
+    await clickPostRow(page, 1);
 
-    // Wait for edit mode to activate
-    await expect(page.getByRole("button", { name: "Add user" })).toBeVisible();
+    const region = bulkRegion(page);
+    await region.locator("button").filter({ hasText: "2" }).first().click();
 
-    // Find and check multiple posts in the assignments section
-    const assignmentsSection = page
-      .locator('text="Shift Assignments"')
-      .locator("..")
-      .locator("..");
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByText(/Are you sure you want to delete 2 post/i)
+    ).toBeVisible();
 
-    const postCheckboxes = assignmentsSection.getByRole("checkbox");
-    const postCount = await postCheckboxes.count();
-
-    if (postCount >= 2) {
-      await postCheckboxes.nth(0).click();
-      await postCheckboxes.nth(1).click();
-
-      // Click delete posts button
-      const deletePostButton = page.getByRole("button", {
-        name: "Delete selected posts",
-      });
-      await deletePostButton.click();
-
-      // Verify dialog appears with plural form
-      const dialog = page.getByRole("dialog");
-      await expect(dialog).toBeVisible();
-
-      // Check title for multiple posts
-      await expect(
-        page.getByText("Are you sure you want to delete 2 posts?")
-      ).toBeVisible();
-
-      // Test "Yes, please!" button confirms deletion
-      const yesButton = page.getByRole("button", { name: "Yes, please!" });
-      await yesButton.click();
-
-      // Wait for deletion to complete
-      await expect(dialog).not.toBeVisible();
-    }
-
-    // Exit edit mode
-    await editToggleButton.click();
+    await dialog.getByRole("button", { name: /^Yes, please!$/i }).click();
+    await expect(dialog).not.toBeVisible();
   });
 
-  test("delete button does nothing when no items are selected", async ({
+  test("single-staff hover-trash opens 'Delete this teammate?' dialog", async ({
     page,
   }) => {
-    await page.goto("/");
+    await waitForApp(page);
 
-    // Wait for app to load
-    await expect(page.getByRole("main")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Staff" })).toBeVisible();
+    const rows = page.locator(STAFF_ROW);
+    test.skip((await rows.count()) < 1, "need at least 1 staff row");
 
-    // Enter edit mode
-    const editToggleButton = page
-      .getByRole("button", { name: "Enter edit mode" })
-      .first();
-    await editToggleButton.click();
+    const first = rows.first();
+    await first.hover();
 
-    // Wait for edit mode to activate
-    await expect(page.getByRole("button", { name: "Add user" })).toBeVisible();
-
-    // Ensure no staff members are selected
-    const staffCheckboxes = page
-      .locator('[data-testid="staff-member"]')
-      .getByRole("checkbox");
-    const checkboxCount = await staffCheckboxes.count();
-    for (let i = 0; i < checkboxCount; i++) {
-      await expect(staffCheckboxes.nth(i)).not.toBeChecked();
-    }
-
-    // Click delete button with no selection
-    const deleteButton = page.getByRole("button", {
-      name: "Delete selected users",
+    const trashBtn = first.getByRole("button", {
+      name: /Delete this teammate\?/i,
     });
-    await deleteButton.click();
+    await expect(trashBtn).toBeVisible({ timeout: 2000 });
+    await trashBtn.click();
 
-    // Verify no dialog appears
-    await expect(page.getByRole("dialog")).not.toBeVisible();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByRole("heading", { name: /Delete this teammate\?/i })
+    ).toBeVisible();
 
-    // Exit edit mode
-    await editToggleButton.click();
+    // Cancel keeps the row.
+    const initial = await rows.count();
+    await dialog.getByRole("button", { name: /^Cancel$|^No$/i }).first().click();
+    await expect(dialog).not.toBeVisible();
+    await expect(rows).toHaveCount(initial);
+  });
+
+  test("single-post hover-trash opens 'Delete this position?' dialog and confirms removal", async ({
+    page,
+  }) => {
+    await waitForApp(page);
+    const grid = page.locator("#assignments-table");
+    // Switch to Position view so each post becomes a card with a hover-trash
+    // in its `.head.post-head[data-post-id]`.
+    await grid.locator('button[data-group="post"]').click();
+    const headRows = grid.locator(".head.post-head[data-post-id]");
+    const initial = await headRows.count();
+    test.skip(initial < 1, "need at least 1 post");
+
+    const firstRow = headRows.nth(0);
+    await firstRow.hover();
+
+    const trash = firstRow.getByRole("button", {
+      name: /Delete this position\?/i,
+    });
+    await expect(trash).toBeVisible({ timeout: 2000 });
+    await trash.click();
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByRole("heading", { name: /Delete this position\?/i })
+    ).toBeVisible();
+    await expect(dialog.getByText(/Once deleted, it can't be undone/i)).toBeVisible();
+    await expect(dialog.getByRole("button", { name: /^No$/i })).toBeVisible();
+    await expect(
+      dialog.getByRole("button", { name: /^Yes, please!$/i })
+    ).toBeVisible();
+
+    await dialog.getByRole("button", { name: /^Yes, please!$/i }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect
+      .poll(async () => headRows.count(), { timeout: 4000 })
+      .toBeLessThan(initial);
+  });
+
+  test("single-post hover-trash dialog cancel keeps the post", async ({
+    page,
+  }) => {
+    await waitForApp(page);
+    const grid = page.locator("#assignments-table");
+    await grid.locator('button[data-group="post"]').click();
+    const headRows = grid.locator(".head.post-head[data-post-id]");
+    const initial = await headRows.count();
+    test.skip(initial < 1, "need at least 1 post");
+
+    const firstRow = headRows.nth(0);
+    await firstRow.hover();
+    const trash = firstRow.getByRole("button", {
+      name: /Delete this position\?/i,
+    });
+    await trash.click();
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: /^No$/i }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(headRows).toHaveCount(initial);
   });
 });

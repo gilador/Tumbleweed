@@ -11,16 +11,13 @@ function isHebrew(char: string): boolean {
   return HEBREW_RANGE.test(char);
 }
 
-/**
- * Process a string for jsPDF RTL rendering.
- * - Reverses the overall character order (since jsPDF renders L→R)
- * - Keeps LTR runs (numbers, Latin) in their original internal order
- */
-export function processRtl(text: string): string {
-  if (!HEBREW_RANGE.test(text)) return text; // No Hebrew, no processing needed
+interface Run {
+  text: string;
+  isHeb: boolean;
+}
 
-  // Split text into runs of Hebrew vs non-Hebrew characters
-  const runs: { text: string; isHeb: boolean }[] = [];
+function splitRuns(text: string): Run[] {
+  const runs: Run[] = [];
   let currentRun = "";
   let currentIsHeb = false;
 
@@ -41,16 +38,37 @@ export function processRtl(text: string): string {
   if (currentRun) {
     runs.push({ text: currentRun, isHeb: currentIsHeb });
   }
+  return runs;
+}
 
-  // Reverse Hebrew runs internally, then reverse the entire run order
-  const processedRuns = runs.map((run) => {
+function reverseHebRuns(runs: Run[]): string[] {
+  return runs.map((run) => {
     if (run.isHeb) {
       // Reverse the Hebrew characters
       return [...run.text].reverse().join("");
     }
     return run.text;
   });
+}
 
-  // Reverse run order for RTL visual layout
-  return processedRuns.reverse().join("");
+/**
+ * Reverse Hebrew runs in place for jsPDF (which renders L→R with no bidi).
+ * Overall run order is preserved — suitable for LTR document flow where
+ * Hebrew segments appear inline with Latin/digit content.
+ * Fast-path: non-Hebrew strings are returned unchanged.
+ */
+export function shapeHebrew(text: string): string {
+  if (!HEBREW_RANGE.test(text)) return text;
+  return reverseHebRuns(splitRuns(text)).join("");
+}
+
+/**
+ * Process a string for jsPDF RTL rendering.
+ * - Reverses the overall character order (since jsPDF renders L→R)
+ * - Keeps LTR runs (numbers, Latin) in their original internal order
+ */
+export function processRtl(text: string): string {
+  if (!HEBREW_RANGE.test(text)) return text; // No Hebrew, no processing needed
+  // Reverse Hebrew runs internally, then reverse the entire run order
+  return reverseHebRuns(splitRuns(text)).reverse().join("");
 }

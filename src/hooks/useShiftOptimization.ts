@@ -5,26 +5,13 @@ import { shiftState, getActiveRosterFromState, updateRosterById } from "../store
 import { optimizeAllRosters, RosterInput } from "../service/shiftOptimizedService";
 import { UserShiftData } from "../models";
 
-// Formats an optimizer duration (ms) into a human-readable, RTL-safe
-// LTR atomic token suitable for interpolating into Hebrew/English
-// success copy. Tiers:
-//   0–999ms   →  "Nms"
-//   1–59.9s   →  "N.Ns"  (one decimal)
-//   60s+      →  "Nm Ns"  (re-distributes so seconds is never 60)
-//   negative  →  clamped to "0ms"
 export function formatOptimizationDuration(ms: number): string {
-  if (!Number.isFinite(ms) || ms <= 0) return "0ms";
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  if (ms < 60000) {
-    const s = ms / 1000;
-    return `${s.toFixed(1)}s`;
-  }
-  let minutes = Math.floor(ms / 60000);
-  let seconds = Math.round((ms - minutes * 60000) / 1000);
-  if (seconds === 60) {
-    minutes += 1;
-    seconds = 0;
-  }
+  const rounded = Math.max(0, ms);
+  if (rounded < 1000) return `${Math.round(rounded)}ms`;
+  if (rounded < 60000) return `${(rounded / 1000).toFixed(1)}s`;
+  const totalSec = Math.round(rounded / 1000);
+  const minutes = Math.floor(totalSec / 60);
+  const seconds = totalSec % 60;
   return `${minutes}m ${seconds}s`;
 }
 
@@ -174,7 +161,7 @@ export function useShiftOptimization(
         };
       });
 
-      const { results, allOptimal } = await optimizeAllRosters(inputs);
+      const { results, allOptimal, durationMs } = await optimizeAllRosters(inputs);
 
       if (!allOptimal) {
         // Check if the active roster failed
@@ -263,7 +250,12 @@ export function useShiftOptimization(
       console.log("Optimization successful, new assignments applied.");
 
       if (allOptimal) {
-        showSuccess(t("optimizationSuccess"));
+        const formatted = `(${formatOptimizationDuration(durationMs)})`;
+        showSuccess(
+          t("optimizationSuccessWithDuration", { duration: formatted }),
+          undefined,
+          formatted,
+        );
       }
     } catch (error) {
       console.error("Error during optimization:", error);

@@ -177,6 +177,21 @@ test.describe("Share Popup - Desktop", () => {
     expect(download.suggestedFilename()).toMatch(/\.pdf$/);
   });
 
+  test("WhatsApp on desktop triggers a PDF download (no new tab, no print dialog)", async ({ page, context }) => {
+    await openSharePopup(page);
+
+    const downloadPromise = page.waitForEvent("download", { timeout: 15000 });
+    const dialog = page.locator('[role="dialog"]');
+    await dialog.getByText(t.whatsapp).click();
+
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(/\.pdf$/);
+
+    // Assert no new page was opened (new tab / blob nav opens a new page).
+    await page.waitForTimeout(500);
+    expect(context.pages()).toHaveLength(1);
+  });
+
   test("closes dialog via close button", async ({ page }) => {
     await openSharePopup(page);
 

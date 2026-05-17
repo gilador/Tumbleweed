@@ -362,6 +362,7 @@ function validateSolution(
 export async function optimizeShift(
   userData: UserShiftData[]
 ): Promise<OptimizedShiftResult> {
+  const solveStart = performance.now();
   try {
     console.log("Starting optimization with userData:", {
       numUsers: userData.length,
@@ -579,6 +580,7 @@ export async function optimizeShift(
       trackEvent("optimizer-run", {
         staffCount: userData.length,
         constraintCount: numPosts * numTimeSlots,
+        durationMs: performance.now() - solveStart,
       });
 
       return {
@@ -613,11 +615,13 @@ export interface RosterInput {
 export interface MultiRosterResult {
   results: Map<string, OptimizedShiftResult>;
   allOptimal: boolean;
+  durationMs: number;
 }
 
 export async function optimizeAllRosters(
   inputs: RosterInput[]
 ): Promise<MultiRosterResult> {
+  const startedAt = performance.now();
   const results = new Map<string, OptimizedShiftResult>();
   let allOptimal = true;
 
@@ -635,13 +639,16 @@ export async function optimizeAllRosters(
     }
   }
 
+  const durationMs = performance.now() - startedAt;
+
   trackEvent("optimizer-run-multi", {
     staffCount: inputs[0]?.userData.length || 0,
     constraintCount: inputs.reduce(
       (sum, i) => sum + i.posts.length * i.hours.length,
       0
     ),
+    durationMs,
   });
 
-  return { results, allOptimal };
+  return { results, allOptimal, durationMs };
 }

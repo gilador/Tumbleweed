@@ -1,11 +1,19 @@
 {
   "tumbleweed": "Tumbleweed",
+  "contextMenu": {
+    "select": "בחירה",
+    "assignWorker": "שיבוץ עובד",
+    "rename": "שינוי שם",
+    "delete": "מחיקה",
+    "copyName": "העתקת שם"
+  },
 
   "shiftManager": "ניהול משמרת",
   "roster": "סידור",
   "addRoster": "הוסף סידור",
   "defaultPost": "עמדה {{n}}",
   "defaultMember": "עובד {{n}}",
+  "editUserName": "עריכת שם",
 
   "post": "עמדה",
   "posts": "עמדות",
@@ -22,6 +30,14 @@
   "intense": "מעט",
   "relaxed": "הרבה",
   "intensity": "עצימות",
+  "intensityFew": "מעטות",
+  "intensityMany": "רבות",
+  "intensityConfirmTitle": "שינוי מספר משמרות",
+  "intensityConfirmBody": "פעולה זו תשנה ל-{{count}} משמרות ותנקה את השיבוצים הקיימים",
+  "intensityConfirmAccept": "שנה משמרות",
+  "intensityConfirmCancel": "השאר כמו שהיה",
+  "intensityChanged": "שונה ל-{{count}} משמרות",
+  "undo": "בטל",
 
   "allAvailable": "הכל זמין",
   "allUnavailable": "הכל לא זמין",
@@ -90,12 +106,21 @@
   "cannotMakeUnavailable": "לא ניתן להפוך משתמש זה ללא זמין - לפחות משתמש אחד חייב להיות זמין בכל משבצת זמן כדי לאפשר אופטימיזציה.",
   "availabilityResetToAllAvailable": "הזמינות אופסה לזמין בהכל",
   "availabilitySetToAllUnavailable": "הזמינות הוגדרה ללא זמין בהכל",
+  "availabilityUpdated": "הזמינות עודכנה",
+  "heatmapToggle": "מפת חום",
+  "actionsToggle": "פעולות",
+  "weekdaysOnly": "ימי חול בלבד",
+  "weekendsOnly": "סופ\"ש בלבד",
+  "legendFull": "כולם זמינים",
+  "legendPartial": "חלק זמינים",
+  "legendEmpty": "לא זמינים",
   "toggleHourColumnAvailability": "החלף זמינות לכל עמודת השעה",
   "togglePostAvailability": "החלף זמינות לכל העמדה",
 
   "addPost": "הוסף עמדה",
   "deleteSelectedPosts": "מחק עמדות נבחרות",
   "selectAllPosts": "בחר את כל העמדות",
+  "deselectAllPosts": "בטל בחירת כל העמדות",
   "hideShiftAdjustment": "הסתר הגדרות משמרת",
   "showShiftAdjustment": "הצג הגדרות משמרת",
   "deletePostsConfirm": "האם אתה בטוח שברצונך למחוק {{count}} עמדות?",
@@ -104,14 +129,19 @@
   "addUser": "הוסף איש צוות",
   "deleteSelectedUsers": "מחק אנשי צוות נבחרים",
   "selectAllUsers": "בחר את כל אנשי הצוות",
+  "deselectAllUsers": "בטל בחירת כל אנשי הצוות",
+  "nSelected": "{{count}} נבחרו",
+  "cancelSelection": "בטל בחירה",
   "resetAllUserAvailability": "אפס זמינות כל אנשי הצוות",
   "resetAllUserAvailabilityToAvailable": "אפס זמינות כל אנשי הצוות לזמין",
   "deleteStaffConfirm": "האם אתה בטוח שברצונך למחוק {{count}} אנשי צוות?",
   "resetAllAvailabilityTitle": "איפוס כל הזמינות",
-  "resetAllAvailabilityDescription": "האם אתה בטוח שברצונך לאפס את הזמינות של כל המשתמשים ל\"זמין\" בכל משבצות הזמן? פעולה זו תמחק את כל הגדרות הזמינות המותאמות אישית.",
+  "resetAllAvailabilityDescription": "לאפס את הזמינות ל\"זמין\" בכל משבצות הזמן עבור אנשי הצוות שנבחרו? פעולה זו תמחק את כל הגדרות הזמינות המותאמות אישית",
 
   "noWorkersAddedYet": "עדיין לא נוספו עובדים",
   "clickToAddWorker": "לחץ על כפתור + כדי להוסיף עובד חדש",
+  "scrollStaffListToTop": "גלול את רשימת הצוות למעלה",
+  "scrollStaffListToBottom": "גלול את רשימת הצוות למטה",
 
   "clearAssignments": "נקה",
   "clearAllAssignmentsTitle": "לנקות את כל השיבוצים?",
@@ -218,6 +248,7 @@
   "problematicTimeSlots": "משבצות זמן בעייתיות בהן אין משתמשים זמינים",
   "fixAvailabilityHint": "כדי לתקן זאת, אנא ודא שלפחות משתמש אחד זמין בכל אחת ממשבצות הזמן הללו בלשונית הזמינות.",
   "optimizationSuccess": "שיבוצי המשמרות אופטמו בהצלחה",
+  "optimizationSuccessWithDuration": "שיבוצי המשמרות אופטמו בהצלחה {{duration}}",
   "optimizationError": "אירעה שגיאה בלתי צפויה במהלך האופטימיזציה. אנא נסה שוב.",
 
   "preset9to5": "9-to-5",
@@ -235,7 +266,6 @@
   "copyToWeekdays": "העתק לימי חול",
   "copyToWeekend": "העתק לסוף שבוע",
   "shiftsPerDay": "{{count}} משמרות/יום",
-  "howItWorksDetail7d": "{{opHours}} שעות פעילות ({{start}}\u2013{{end}}) עם {{rest}} שעות מנוחה מינ׳ ÷ {{posts}} עמדות × {{staff}} אנשי צוות × 7 ימים = {{shifts}} משמרות/יום של {{duration}} שעות כל אחת",
 
   "lastSync": "סנכרון אחרון",
   "currentState": "נוכחי",
@@ -249,6 +279,7 @@
   "driveConflictUseDrive": "השתמש בנתוני Drive",
   "driveConflictKeepLocal": "שמור נתונים מקומיים",
   "syncNow": "סנכרן עכשיו",
+  "syncStatus": "סטטוס סנכרון",
   "noFeasibleSchedule": "אין מספיק אנשי צוות לכסות את כל העמדות — הוסיפו עובדים או צמצמו עמדות",
   "overCapacity": "הנדרש חורג מהקיבולת — הוסיפו עובדים או צמצמו עמדות/שעות",
   "hintAddStaff": "הוסיפו אנשי צוות כדי להתחיל",
@@ -276,5 +307,26 @@
   "drivePromptPrivacy": "כל הנתונים נשמרים ב-Google Drive הפרטי שלכם ודורשים הרשאות Drive",
 
   "dailyView": "יומי",
-  "weeklyView": "שבועי"
+  "weeklyView": "שבועי",
+
+  "schedule": "סידור",
+  "addPosition": "הוסף עמדה",
+  "addUserShort": "הוסף",
+  "positionsCount": "{{count}} עמדות",
+  "shiftsPerDayShort": "{{count}} משמרות/יום",
+  "shiftDurationShort": "{{duration}}ש'",
+  "availabilityCountHeader": "זמינות — {{count}} מתוך {{total}}",
+  "pickTeammate": "בחרו חבר/ת צוות",
+  "pickTeammateDescription": "לחצו על מישהו ברשימה כדי לראות את השיבוצים שלהם",
+  "deletePostConfirmSingle": "למחוק עמדה זו?",
+  "deleteUserConfirmSingle": "למחוק איש צוות זה?",
+  "selectAll": "בחר הכל",
+  "deleteCount": "מחק {{count}}",
+  "clickToAssign": "לחצו לשיבוץ",
+  "groupBy": {
+    "time": "זמן",
+    "position": "עמדה",
+    "timeAria": "קבץ לפי זמן",
+    "positionAria": "קבץ לפי עמדה"
+  }
 }

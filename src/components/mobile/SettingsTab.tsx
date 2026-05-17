@@ -9,6 +9,8 @@ import { SyncStatusIcon } from "../SyncStatusIcon";
 import { TimeInput } from "../TimeInput";
 import { IconPlus, IconTrash, IconPencil, IconCheck, IconX, IconUser, IconLogin, IconLogout, IconBrandGithub, IconSettings } from "@tabler/icons-react";
 import { useLevels } from "../../hooks/useLevels";
+import { useIntensityChange } from "../../hooks/useIntensityChange";
+import { IntensityPanel } from "../IntensityPanel";
 import { useAuth } from "../../lib/auth";
 import { LanguageSwitcher } from "../LanguageSwitcher";
 import { getSetting, setSetting } from "../../lib/settings";
@@ -27,8 +29,6 @@ import { Button } from "../elements/button";
 import tumbleweedIcon from "../../../assets/tumbleweed.svg";
 import { useScheduleMode } from "../../hooks/useScheduleMode";
 import { encodeFlatHour } from "../../service/weeklyScheduleUtils";
-import { ShiftLevel } from "../../service/shiftLevels";
-import { generateDynamicHours, generateWeeklyDynamicHours } from "../../service/shiftManagerUtils";
 
 interface SettingsTabProps {
   posts: UniqueString[];
@@ -45,6 +45,14 @@ interface SettingsTabProps {
   editingPostName: string;
   setEditingPostName: (name: string) => void;
   savePostEdit: () => void;
+  showToastWithAction: (
+    message: string,
+    actionLabel: string,
+    onAction: () => void,
+    duration?: number,
+    onClose?: () => void
+  ) => string;
+  dismissToast: (id: string) => void;
 }
 
 export function SettingsTab({
@@ -60,6 +68,8 @@ export function SettingsTab({
   editingPostName,
   setEditingPostName,
   savePostEdit,
+  showToastWithAction,
+  dismissToast,
 }: SettingsTabProps) {
   const { t } = useTranslation();
   const { isAuthenticated, user, signInWithGoogle, signOut } = useAuth();
@@ -76,47 +86,18 @@ export function SettingsTab({
 
   const { levels, selectedLevel, setLevel: setLevelHook } = useLevels();
 
-  const applyLevel = (level: ShiftLevel) => {
-    const newHours = scheduleMode === "7d"
-      ? generateWeeklyDynamicHours(startTime, endTime, posts.length, staffCount, level.shifts)
-      : generateDynamicHours(startTime, endTime, posts.length, staffCount, level.shifts);
-
-    setShiftData((prev) => {
-      const roster = getActiveRosterFromState(prev);
-      const activeRosterId = prev.activeRosterId;
-
-      const updatedUserShiftData = (prev.userShiftData || []).map((userData) => {
-        const updatedConstraints = (roster.posts || []).map((post, postIdx) => {
-          return newHours.map((hour, hourIndex) => {
-            const existingConstraint = userData.constraints?.[postIdx]?.[hourIndex];
-            return existingConstraint || { postID: post.id, hourID: hour.id, availability: true };
-          });
-        });
-        return {
-          ...userData,
-          constraints: updatedConstraints,
-          constraintsByRoster: { ...userData.constraintsByRoster, [activeRosterId]: updatedConstraints },
-        };
-      });
-
-      const shouldClearAssignments = roster.hours?.length !== newHours.length;
-      const clearedAssignments = shouldClearAssignments
-        ? (roster.posts || []).map(() => newHours.map(() => null))
-        : roster.assignments;
-
-      return {
-        ...updateActiveRoster(prev, (r) => ({
-          ...r,
-          startTime,
-          endTime,
-          hours: newHours,
-          assignments: clearedAssignments,
-        })),
-        selectedShiftCount: level.shifts,
-        userShiftData: updatedUserShiftData,
-      };
-    });
-  };
+  const intensity = useIntensityChange({
+    showToastWithAction,
+    dismissToast,
+    posts,
+    startTime,
+    endTime,
+    scheduleMode,
+    surface: "mobile",
+    setLevel: setLevelHook,
+    toastMessage: (n) => t("intensityChanged", { count: n }),
+    undoLabel: t("undo"),
+  });
 
   const updateShiftStateWithNewHours = useCallback(
     (newStartTime: string, newEndTime: string, _newIntensity: number) => {
@@ -446,103 +427,42 @@ export function SettingsTab({
 
       {/* Intensity (Level Slider) */}
       <div className="rounded-lg border border-border p-4 space-y-3">
-        <h2 className="text-sm font-semibold">{t("shiftIntensity")}</h2>
-        {(() => {
-          const feasibleLevels = levels.filter((l) => l.feasible);
-          const selectedIdx = selectedLevel ? levels.indexOf(selectedLevel) : -1;
-
-          if (levels.length === 0) {
-            return <p className="text-xs text-muted-foreground text-center">{t("noFeasibleSchedule")}</p>;
-          }
-
-          if (levels.length === 1 && feasibleLevels.length <= 1) {
-            return (
-              <div className="flex flex-col items-center gap-2 py-2">
-                <div className={`w-1.5 h-5 rounded-sm ${feasibleLevels.length === 1 ? "bg-primary" : "bg-muted-foreground/30"}`} />
-                <span className="text-sm font-medium">{levels[0].shifts}×{levels[0].duration.toFixed(1)}h</span>
-                {feasibleLevels.length === 0 && levels[0].staffGap && (
-                  <span className="text-xs text-red-500">
-                    {t("needMoreStaff", { count: levels[0].staffGap, defaultValue: `Need ${levels[0].staffGap} more staff` })}
-                  </span>
-                )}
-              </div>
-            );
-          }
-
-          return (
-            <div className="space-y-2">
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-muted-foreground whitespace-nowrap">{t("intense", { defaultValue: "Few" })}</span>
-                <div className="flex-1 flex items-center relative h-6">
-                  <div className="absolute inset-x-[10px] h-0.5 bg-border rounded-full" />
-                  <div className="relative w-full flex items-center justify-between">
-                    {levels.map((level, i) => {
-                      const tooltipText = !level.feasible && level.staffGap
-                        ? `${level.shifts}×${level.duration.toFixed(1)}h — ${t("needMoreStaffOrLessPosts", {
-                            staffGap: level.staffGap,
-                            postGap: level.postGap,
-                            defaultValue: `Need ${level.staffGap} more staff or ${level.postGap} fewer posts`,
-                          })}`
-                        : "";
-                      return (
-                      <div
-                        key={i}
-                        className={`relative group flex items-center justify-center w-5 h-5 ${level.feasible ? "cursor-pointer" : "cursor-default"}`}
-                        onClick={() => {
-                          if (level.feasible) {
-                            setLevelHook(level.shifts);
-                            applyLevel(level);
-                          }
-                        }}
-                      >
-                      <div
-                        className={`transition-all pointer-events-none ${
-                          level.feasible
-                            ? i === selectedIdx
-                              ? "w-1.5 h-5 rounded-sm bg-primary shadow-sm"
-                              : "w-0.5 h-4 rounded-sm bg-muted-foreground/40 group-hover:bg-muted-foreground/70 group-hover:h-[1.125rem]"
-                            : "w-0.5 h-4 rounded-sm bg-muted-foreground/20"
-                        }`}
-                      />
-                      {tooltipText && (
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-foreground text-background text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 pointer-events-none z-20">
-                          {tooltipText}
-                        </div>
-                      )}
-                      </div>
-                      );
-                    })}
-                  </div>
-                </div>
-                <span className="text-xs text-muted-foreground whitespace-nowrap">{t("relaxed", { defaultValue: "Many" })}</span>
-              </div>
-            </div>
-          );
-        })()}
-        {selectedLevel && (
-          <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
-            <span>{t("shiftsLabel", { defaultValue: "Shifts" })}: <span className="font-medium text-foreground">{selectedLevel.shifts}</span></span>
-            <span>{t("minRest", { defaultValue: "Min. rest" })}: <span className="font-medium text-foreground">{selectedLevel.restBetween.toFixed(1)}h</span></span>
-            <span>{t("duration")}: <span className="font-medium text-primary">{selectedLevel.duration.toFixed(2)}h</span></span>
-          </div>
-        )}
+        <IntensityPanel
+          levels={levels}
+          selectedLevel={selectedLevel}
+          postsCount={posts.length}
+          staffCount={staffCount}
+          onLevelChange={intensity.requestLevelChange}
+          variant="mobile"
+        />
       </div>
 
-      {/* How it works */}
-      {selectedLevel && (
-        <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
-          <div className="text-xs text-foreground space-y-1">
-            <p>
-              <span className="font-semibold">{t("howItWorks")}:</span>{" "}
-              {selectedLevel.shifts}×{selectedLevel.duration.toFixed(1)}h {t("shifts").toLowerCase()} · {posts.length} {t("posts").toLowerCase()} · {staffCount} {t("staff").toLowerCase()}
-            </p>
-            <p className="text-muted-foreground">
-              {t("eachWorker", { defaultValue: "Each worker" })}: {selectedLevel.shiftsPerWorker} {t("shifts").toLowerCase()}, {selectedLevel.workHours.toFixed(1)}h {t("work", { defaultValue: "work" })}
-              {selectedLevel.restBetween > 0 && ` · ${selectedLevel.restBetween.toFixed(1)}h ${t("rest").toLowerCase()} ${t("betweenShifts", { defaultValue: "between shifts" })}`}
-            </p>
-          </div>
-        </div>
-      )}
+      {/* Confirm dialog for shift count change */}
+      <Dialog
+        open={intensity.confirmState.open}
+        onOpenChange={(open) => {
+          if (!open) intensity.cancelConfirm();
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("intensityConfirmTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("intensityConfirmBody", {
+                count: intensity.confirmState.pending?.shifts ?? 0,
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="sm:space-x-0 gap-2 mt-4">
+            <Button variant="outline" onClick={intensity.cancelConfirm}>
+              {t("intensityConfirmCancel")}
+            </Button>
+            <Button onClick={intensity.acceptConfirm}>
+              {t("intensityConfirmAccept")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Pro tip */}
       <p className="text-xs text-muted-foreground/60 text-center">

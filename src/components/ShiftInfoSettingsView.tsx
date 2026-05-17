@@ -1,13 +1,24 @@
 import { useState } from "react";
-import { useRecoilState } from "recoil";
+import { useRecoilValue } from "recoil";
 import { useTranslation } from "react-i18next";
 import { UniqueString } from "../models/index";
-import { shiftState, getActiveRosterFromState, updateActiveRoster } from "../stores/shiftStore";
+import { shiftState, getActiveRosterFromState } from "../stores/shiftStore";
 import { useScheduleMode } from "../hooks/useScheduleMode";
-// encodeFlatHour used in weekly mode via generateDynamicHours
 import { TimeInput } from "./TimeInput";
 import { useLevels } from "../hooks/useLevels";
-import { ShiftLevel } from "../service/shiftLevels";
+import { useIntensityChange } from "../hooks/useIntensityChange";
+import { IntensityPanel } from "./IntensityPanel";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./elements/dialog";
+import { Button } from "./elements/button";
+import { useRecoilState } from "recoil";
+import { updateActiveRoster } from "../stores/shiftStore";
 import { generateDynamicHours, generateWeeklyDynamicHours } from "../service/shiftManagerUtils";
 
 export interface ShiftInfoSettingsViewProps {
@@ -17,6 +28,14 @@ export interface ShiftInfoSettingsViewProps {
   onStartTimeChange?: (startTime: string) => void;
   onEndTimeChange?: (endTime: string) => void;
   posts?: UniqueString[];
+  showToastWithAction: (
+    message: string,
+    actionLabel: string,
+    onAction: () => void,
+    duration?: number,
+    onClose?: () => void
+  ) => string;
+  dismissToast: (id: string) => void;
 }
 
 export function ShiftInfoSettingsView({
@@ -26,9 +45,12 @@ export function ShiftInfoSettingsView({
   onStartTimeChange,
   onEndTimeChange,
   posts = [],
+  showToastWithAction,
+  dismissToast,
 }: ShiftInfoSettingsViewProps) {
   const { t } = useTranslation();
-  const [shiftData, setShiftData] = useRecoilState(shiftState);
+  const shiftData = useRecoilValue(shiftState);
+  const [, setShiftData] = useRecoilState(shiftState);
   const activeRoster = getActiveRosterFromState(shiftData);
   const { levels, selectedLevel, setLevel, opHours } = useLevels();
   const { scheduleMode, startDate, switchTo7D, switchTo24H, updateStartDate } = useScheduleMode();
@@ -57,62 +79,22 @@ export function ShiftInfoSettingsView({
   const [activePreset, setActivePreset] = useState<PresetKey>(() => detectPreset(localStartTime, localEndTime));
   const [customTimes, setCustomTimes] = useState<{ start: string; end: string }>({ start: localStartTime, end: localEndTime });
 
-  // --- Level selection → update hours in state ---
-  const applyLevel = (level: ShiftLevel, newStartTime?: string, newEndTime?: string) => {
-    const startT = newStartTime || localStartTime;
-    const endT = newEndTime || localEndTime;
+  // --- Intensity change (confirm + undo) ---
+  const intensity = useIntensityChange({
+    showToastWithAction,
+    dismissToast,
+    posts,
+    startTime: localStartTime,
+    endTime: localEndTime,
+    scheduleMode,
+    surface: "desktop",
+    setLevel,
+    toastMessage: (n) => t("intensityChanged", { count: n }),
+    undoLabel: t("undo"),
+  });
 
-    const newHours = scheduleMode === "7d"
-      ? generateWeeklyDynamicHours(startT, endT, posts.length, staffCount, level.shifts)
-      : generateDynamicHours(startT, endT, posts.length, staffCount, level.shifts);
-
-    setShiftData((prev) => {
-      const roster = getActiveRosterFromState(prev);
-      const activeRosterId = prev.activeRosterId;
-
-      // Update user constraints to match new hours structure
-      const updatedUserShiftData = (prev.userShiftData || []).map((userData) => {
-        const updatedConstraints = (roster.posts || []).map((post) => {
-          return newHours.map((hour, hourIndex) => {
-            const existingConstraint = userData.constraints?.[roster.posts?.indexOf(post) || 0]?.[hourIndex];
-            return existingConstraint || { postID: post.id, hourID: hour.id, availability: true };
-          });
-        });
-        return {
-          ...userData,
-          constraints: updatedConstraints,
-          constraintsByRoster: { ...userData.constraintsByRoster, [activeRosterId]: updatedConstraints },
-        };
-      });
-
-      const shouldClearAssignments = roster.hours?.length !== newHours.length;
-      const clearedAssignments = shouldClearAssignments
-        ? (roster.posts || []).map(() => newHours.map(() => null))
-        : roster.assignments;
-
-      return {
-        ...updateActiveRoster(prev, (r) => ({
-          ...r,
-          startTime: startT,
-          endTime: endT,
-          hours: newHours,
-          assignments: clearedAssignments,
-        })),
-        selectedShiftCount: level.shifts,
-        userShiftData: updatedUserShiftData,
-      };
-    });
-  };
-
-  const handleLevelChange = (level: ShiftLevel) => {
-    if (!level || !level.feasible) return;
-    setLevel(level.shifts);
-    applyLevel(level);
-  };
-
-  // --- Time changes ---
+  // --- Time changes (unchanged path) ---
   const applyTimeChange = (newStart: string, newEnd: string) => {
-    // Recompute with current selected level
     const currentShiftCount = shiftData.selectedShiftCount;
     const newHours = scheduleMode === "7d"
       ? generateWeeklyDynamicHours(newStart, newEnd, posts.length, staffCount, currentShiftCount)
@@ -179,12 +161,6 @@ export function ShiftInfoSettingsView({
     }
   };
 
-  // --- Slider helpers ---
-  const feasibleLevels = levels.filter((l) => l.feasible);
-  const selectedSliderIndex = selectedLevel
-    ? levels.indexOf(selectedLevel)
-    : feasibleLevels.length > 0 ? levels.indexOf(feasibleLevels[Math.floor(feasibleLevels.length / 2)]) : -1;
-
   return (
     <div className={`flex flex-col gap-1 p-2 ${className}`}>
       {/* Schedule Mode toggle */}
@@ -247,7 +223,7 @@ export function ShiftInfoSettingsView({
               onChange={(time) => handleManualTimeChange("end", time)}
               className="flex-1"
             />
-            <span className="text-xs font-medium text-primary whitespace-nowrap">
+            <span className="text-xs font-medium text-primary whitespace-nowrap" dir="ltr">
               {opHours}hr
             </span>
           </div>
@@ -266,105 +242,43 @@ export function ShiftInfoSettingsView({
       {/* Shift Intensity (Level Slider) */}
       <div className="flex-shrink-0">
         <div className="border border-border rounded-lg p-2 space-y-1">
-          <h3 className="text-xs font-semibold text-muted-foreground">{t("shiftIntensity")}</h3>
-
-          {levels.length === 0 ? (
-            // No levels at all
-            <p className="text-xs text-muted-foreground text-center py-1">
-              {t("noFeasibleSchedule")}
-            </p>
-          ) : levels.length === 1 && feasibleLevels.length <= 1 ? (
-            // Single level — centered dot with stats
-            <div className="flex flex-col items-center gap-1 py-1">
-              <div className="flex items-center gap-2 text-xs">
-                <div className={`w-1 h-3.5 rounded-sm ${feasibleLevels.length === 1 ? "bg-primary" : "bg-muted-foreground/30"}`} />
-                <span className="text-muted-foreground whitespace-nowrap">{t("shiftsLabel", { defaultValue: "Shifts" })}: <span className="font-medium text-foreground">{levels[0].shifts}</span></span>
-                <span className="text-muted-foreground whitespace-nowrap">{t("minRest", { defaultValue: "Min. rest" })}: <span className="font-medium text-foreground">{levels[0].restBetween.toFixed(1)}h</span></span>
-                <span className="text-muted-foreground whitespace-nowrap">{t("duration")}: <span className="font-medium text-primary">{levels[0].duration.toFixed(2)}h</span></span>
-              </div>
-              {feasibleLevels.length === 0 && levels[0].staffGap && (
-                <span className="text-[10px] text-red-500">
-                  {t("needMoreStaff", { count: levels[0].staffGap, defaultValue: `Need ${levels[0].staffGap} more staff` })}
-                </span>
-              )}
-            </div>
-          ) : (
-            // Multiple levels — show slider
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 min-h-[1.5rem]">
-                <span className="text-xs text-muted-foreground whitespace-nowrap">{t("intense", { defaultValue: "Few" })}</span>
-                <div className="flex-1 flex items-center relative h-4">
-                  <div className="absolute inset-x-[7px] h-0.5 bg-border rounded-full" />
-                  <div className="relative w-full flex items-center justify-between">
-                    {levels.map((level, i) => {
-                      const tooltipText = level.feasible
-                        ? `${level.shifts}×${level.duration.toFixed(1)}h · ${t("rest")}: ${level.restBetween.toFixed(1)}h`
-                        : level.staffGap
-                          ? `${level.shifts}×${level.duration.toFixed(1)}h — ${t("needMoreStaffOrLessPosts", {
-                              staffGap: level.staffGap,
-                              postGap: level.postGap,
-                              defaultValue: `Need ${level.staffGap} more staff or ${level.postGap} fewer posts`,
-                            })}`
-                          : "";
-                      return (
-                        <div
-                          key={i}
-                          className={`relative group flex items-center justify-center w-3.5 h-3.5 ${level.feasible ? "cursor-pointer" : "cursor-default"}`}
-                          onClick={() => {
-                            if (level.feasible) handleLevelChange(level);
-                          }}
-                        >
-                          <div
-                            className={`transition-all pointer-events-none ${
-                              level.feasible
-                                ? i === selectedSliderIndex
-                                  ? "w-1 h-3.5 rounded-sm bg-primary shadow-sm"
-                                  : "w-0.5 h-3 rounded-sm bg-muted-foreground/40 group-hover:bg-muted-foreground/70 group-hover:h-3.5"
-                                : "w-0.5 h-3 rounded-sm bg-muted-foreground/20"
-                            }`}
-                          />
-                          {tooltipText && (
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded bg-foreground text-background text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 pointer-events-none z-20">
-                              {tooltipText}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-                <span className="text-xs text-muted-foreground whitespace-nowrap">{t("relaxed", { defaultValue: "Many" })}</span>
-                {selectedLevel && (
-                  <>
-                    <span className="text-muted-foreground/50 mx-1">|</span>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">{t("shiftsLabel", { defaultValue: "Shifts" })}: <span className="font-medium text-foreground">{selectedLevel.shifts}</span></span>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">{t("minRest", { defaultValue: "Min. rest" })}: <span className="font-medium text-foreground">{selectedLevel.restBetween.toFixed(1)}h</span></span>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">{t("duration")}: <span className="font-medium text-primary">{selectedLevel.duration.toFixed(2)}h</span></span>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
+          <IntensityPanel
+            levels={levels}
+            selectedLevel={selectedLevel}
+            postsCount={posts.length}
+            staffCount={staffCount}
+            onLevelChange={intensity.requestLevelChange}
+            variant="desktop"
+          />
         </div>
       </div>
 
-      {/* Info Section */}
-      {selectedLevel && (
-        <div className="flex-shrink-0 mt-1">
-          <div className="bg-primary/5 border border-primary/20 rounded-lg p-2">
-            <div className="text-xs text-foreground text-start space-y-1">
-              <p>
-                <span className="font-semibold">{t("howItWorks")}:</span>{" "}
-                {selectedLevel.shifts}×{selectedLevel.duration.toFixed(1)}h {t("shifts").toLowerCase()} · {posts.length} {t("posts").toLowerCase()} · {staffCount} {t("staff").toLowerCase()}
-              </p>
-              <p className="text-muted-foreground">
-                {t("eachWorker", { defaultValue: "Each worker" })}: {selectedLevel.shiftsPerWorker} {t("shifts").toLowerCase()}, {selectedLevel.workHours.toFixed(1)}h {t("work", { defaultValue: "work" })}
-                {selectedLevel.restBetween > 0 && ` · ${selectedLevel.restBetween.toFixed(1)}h ${t("rest").toLowerCase()} ${t("betweenShifts", { defaultValue: "between shifts" })}`}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Confirm dialog for shift count change */}
+      <Dialog
+        open={intensity.confirmState.open}
+        onOpenChange={(open) => {
+          if (!open) intensity.cancelConfirm();
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("intensityConfirmTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("intensityConfirmBody", {
+                count: intensity.confirmState.pending?.shifts ?? 0,
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={intensity.cancelConfirm}>
+              {t("intensityConfirmCancel")}
+            </Button>
+            <Button onClick={intensity.acceptConfirm}>
+              {t("intensityConfirmAccept")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

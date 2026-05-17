@@ -2,17 +2,32 @@ import { useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useRecoilState } from "recoil";
 import { shiftState, getActiveRosterFromState, updateActiveRoster } from "../stores/shiftStore";
+import { useMultiSelect } from "../stores/selectionStore";
 import { UniqueString } from "../models/index";
 import { defaultHours } from "../constants/shiftManagerConstants";
+import { trackEvent } from "../lib/analytics";
 
 export function usePostHandlers() {
   const { t } = useTranslation();
   const [recoilState, setRecoilState] = useRecoilState(shiftState);
+  const {
+    multiSelected,
+    multiSelectKind,
+    enterMulti,
+    exitMulti,
+    toggleInMulti,
+  } = useMultiSelect();
   const [newPostName, setNewPostName] = useState("");
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editingPostName, setEditingPostName] = useState("");
-  const [checkedPostIds, setCheckedPostIds] = useState<string[]>([]);
+  const [justAddedPostId, setJustAddedPostId] = useState<string | null>(null);
   const lastCheckedPostRef = useRef<number | null>(null);
+
+  // Derive legacy checkedPostIds shape from the kind-aware multi-select atom.
+  const checkedPostIds: string[] =
+    multiSelectKind === "posts" && multiSelected
+      ? Array.from(multiSelected)
+      : [];
 
   const addPost = () => {
     const activeRoster = getActiveRosterFromState(recoilState);
@@ -70,10 +85,19 @@ export function usePostHandlers() {
       };
     });
 
+    setJustAddedPostId(newPostData.id);
+    trackEvent("post-add", {
+      totalAfter: (activeRoster.posts?.length || 0) + 1,
+    });
     return postName; // Return the post name for toast notification
   };
 
   const handlePostEdit = (postId: string, newName: string) => {
+    const activeRoster = getActiveRosterFromState(recoilState);
+    const prevPost = (activeRoster.posts || []).find((p) => p.id === postId);
+    if (prevPost && prevPost.value !== newName) {
+      trackEvent("post-rename", { from: prevPost.value, to: newName });
+    }
     setRecoilState((prev) =>
       updateActiveRoster(prev, (r) => ({
         ...r,
@@ -110,24 +134,77 @@ export function usePostHandlers() {
       const start = Math.min(lastCheckedPostRef.current, currentIndex);
       const end = Math.max(lastCheckedPostRef.current, currentIndex);
       const rangeIds = allPostIds.slice(start, end + 1);
-      setCheckedPostIds((prev) => Array.from(new Set([...prev, ...rangeIds])));
+      const existing =
+        multiSelectKind === "posts" && multiSelected
+          ? Array.from(multiSelected)
+          : [];
+      const merged = Array.from(new Set([...existing, ...rangeIds]));
+      enterMulti(merged, "posts");
+    } else if (multiSelectKind === "posts") {
+      // Already in posts multi: add this id (toggle no-ops if already present).
+      if (!multiSelected?.has(postId)) toggleInMulti(postId);
     } else {
-      setCheckedPostIds((prev) => [...prev, postId]);
+      enterMulti([postId], "posts");
     }
     lastCheckedPostRef.current = allPostIds.indexOf(postId);
   };
 
   const handlePostUncheck = (postId: string) => {
-    setCheckedPostIds((ids) => ids.filter((id) => id !== postId));
+    if (multiSelectKind === "posts" && multiSelected?.has(postId)) {
+      toggleInMulti(postId);
+    }
   };
 
   const handlePostCheckAll = (allWasClicked: boolean) => {
     const activeRoster = getActiveRosterFromState(recoilState);
     if (allWasClicked) {
-      setCheckedPostIds(activeRoster.posts?.map((post) => post.id) || []);
+      const allPostIds = activeRoster.posts?.map((post) => post.id) || [];
+      enterMulti(allPostIds, "posts");
     } else {
-      setCheckedPostIds([]);
+      exitMulti();
     }
+  };
+
+  const removeSinglePost = (postId: string) => {
+    trackEvent("post-delete-single", {});
+    setRecoilState((prev) => {
+      const activeRosterId = prev.activeRosterId;
+      const roster = getActiveRosterFromState(prev);
+      const indexToRemove = (roster.posts || []).findIndex((p) => p.id === postId);
+      if (indexToRemove === -1) return prev;
+
+      const updatedAssignments = roster.assignments
+        ? roster.assignments
+            .map((row) => [...row])
+            .filter((_, idx) => idx !== indexToRemove)
+        : [];
+
+      const updatedUserShiftData = (prev.userShiftData || []).map((userData) => {
+        const newConstraints = userData.constraints.filter(
+          (_, idx) => idx !== indexToRemove
+        );
+        const updatedConstraintsByRoster = {
+          ...userData.constraintsByRoster,
+          [activeRosterId]: newConstraints,
+        };
+        return {
+          ...userData,
+          constraints: newConstraints,
+          constraintsByRoster: updatedConstraintsByRoster,
+        };
+      });
+
+      const updatedPosts = (roster.posts || []).filter((p) => p.id !== postId);
+
+      return {
+        ...updateActiveRoster(prev, (r) => ({
+          ...r,
+          posts: updatedPosts,
+          assignments: updatedAssignments,
+        })),
+        userShiftData: updatedUserShiftData,
+      };
+    });
   };
 
   const handleRemovePosts = (postIdsToRemove: string[]) => {
@@ -185,7 +262,13 @@ export function usePostHandlers() {
         userShiftData: updatedUserShiftData,
       };
     });
-    setCheckedPostIds([]);
+    exitMulti();
+  };
+
+  const consumeJustAddedPostId = () => {
+    const id = justAddedPostId;
+    if (id !== null) setJustAddedPostId(null);
+    return id;
   };
 
   return {
@@ -196,6 +279,8 @@ export function usePostHandlers() {
     editingPostName,
     setEditingPostName,
     checkedPostIds,
+    justAddedPostId,
+    consumeJustAddedPostId,
     addPost,
     handlePostEdit,
     savePostEdit,
@@ -203,5 +288,6 @@ export function usePostHandlers() {
     handlePostUncheck,
     handlePostCheckAll,
     handleRemovePosts,
+    removeSinglePost,
   };
 }

@@ -162,7 +162,7 @@ export function VerticalActionGroup({
 }: VerticalActionGroupProps) {
   return (
     <div
-      className={`flex flex-col items-center gap-1 p-1 rounded-md ${className}`}
+      className={`flex flex-col items-center gap-1 px-1 rounded-md ${className}`}
     >
       {children}
     </div>

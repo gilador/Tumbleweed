@@ -15,20 +15,22 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useMemo, useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRecoilState, useRecoilValue } from "recoil";
 import tumbleweedIcon from "../../assets/tumbleweed.svg";
 import { shiftState, getActiveRosterFromState, shiftScheduleInfoSelector } from "../stores/shiftStore";
-import { RosterSwitcher } from "./RosterSwitcher";
+import { useMultiSelect } from "../stores/selectionStore";
 import { AvailabilityTableView } from "./AvailabilityTableView";
+import { AvailabilityHeatmap } from "./AvailabilityHeatmap";
 import { EditButton } from "./EditButton";
-import { PostListActions } from "./PostListActions";
+import { ScheduleSectionHeader } from "./ScheduleSectionHeader";
+import { StaffSectionHeader } from "./StaffSectionHeader";
 import { ShiftInfoSettingsView } from "./ShiftInfoSettingsView";
 import { SplitScreen } from "./SplitScreen";
 import { SyncStatusIcon } from "./SyncStatusIcon";
 import { VerticalActionGroup } from "./VerticalActionGroup";
 import { WorkerList } from "./WorkerList";
-import { WorkerListActions } from "./WorkerListActions";
+import { ContextMenuRoot } from "./schedule/ContextMenu";
 import { useShiftManagerInitialization } from "../hooks/useShiftManagerInitialization";
 import { useShiftOptimization } from "../hooks/useShiftOptimization";
 import { useUserHandlers } from "../hooks/useUserHandlers";
@@ -43,7 +45,7 @@ import { useAuth } from "../lib/auth";
 import { SharePopup } from "./SharePopup";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { getSetting, setSetting } from "../lib/settings";
-import { enableDebugMode, disableDebugMode } from "../lib/analytics";
+import { enableDebugMode, disableDebugMode, trackEvent } from "../lib/analytics";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 import { getActionHint } from "../service/actionHint";
 import { useLevels } from "../hooks/useLevels";
@@ -64,7 +66,7 @@ function ActionHint({ hasAssignments, isOptimized }: {
   });
 
   let message = "";
-  if (hint === null) return null;
+  if (hint === null || hint.key === "hintOptimized") return null;
   if (hint.key === "hintOverCapacity") {
     message = t(hint.key, { capacity: hint.capacity, needed: hint.needed });
   } else {
@@ -80,7 +82,7 @@ function ActionHint({ hasAssignments, isOptimized }: {
   };
 
   return (
-    <div className={`ms-auto px-3 py-1 rounded-md text-xs text-end ${colors[variant]}`}>
+    <div className={`px-3 py-1 rounded-md text-xs text-end whitespace-nowrap ${colors[variant]}`}>
       {message}
     </div>
   );
@@ -109,10 +111,22 @@ export function ShiftManager() {
   }, [showUserMenu]);
 
   const [isEditing, setIsEditing] = useState(false);
-  const [checkedUserIds, setCheckedUserIds] = useState<string[]>([]);
   const lastCheckedUserRef = useRef<number | null>(null);
+  const {
+    multiSelected,
+    multiSelectKind,
+    inMulti,
+    isMultiChecked,
+    enterMulti,
+    exitMulti,
+    toggleInMulti,
+    handleStaffRowClick,
+  } = useMultiSelect();
+  const checkedUserIds: string[] =
+    multiSelectKind === "staff" && multiSelected ? Array.from(multiSelected) : [];
   const [showShiftSettings, setShowShiftSettings] = useState(false);
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
+  const [pendingDeletePostId, setPendingDeletePostId] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [weeklyView, setWeeklyView] = useState(false);
@@ -121,7 +135,7 @@ export function ShiftManager() {
   useShiftManagerInitialization();
 
   // Use toast system
-  const { toasts, removeToast, showSuccess, showError, showInfo } = useToast();
+  const { toasts, removeToast, showSuccess, showError, showInfo, showActionable } = useToast();
 
   // Use optimization hook
   const { isOptimizeDisabled, optimizeButtonTitle, handleOptimize } =
@@ -139,8 +153,9 @@ export function ShiftManager() {
     updateUserConstraints,
     updateUserName,
     removeUsers,
+    removeSingleUser,
     handleUserSelect,
-    resetAllAvailability,
+    resetAvailabilityForUsers,
   } = useUserHandlers();
 
   // Use post handlers
@@ -150,9 +165,14 @@ export function ShiftManager() {
     handlePostEdit,
     handlePostCheck,
     handlePostUncheck,
-    handlePostCheckAll,
     handleRemovePosts,
+    removeSinglePost,
+    justAddedPostId,
+    consumeJustAddedPostId,
   } = usePostHandlers();
+  void checkedPostIds;
+  void handlePostCheck;
+  void handlePostUncheck;
 
   // Use assignment handlers
   const { handleAssignmentChange, handleAssignmentNameUpdate, handleClearAllAssignments } =
@@ -183,6 +203,53 @@ export function ShiftManager() {
     showSuccess(t("postWasAdded", { name: postName }), 3000, postName);
   };
 
+  // Cmd/Ctrl+A inside schedule grid → select all visible posts; inside staff list → select all staff.
+  const scheduleGridRef = useRef<HTMLDivElement>(null);
+  const staffListRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!(e.key === "a" || e.key === "A")) return;
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (target && target.isContentEditable) return;
+
+      const inSchedule =
+        scheduleGridRef.current && target && scheduleGridRef.current.contains(target);
+      const inStaff =
+        staffListRef.current && target && staffListRef.current.contains(target);
+
+      if (inSchedule) {
+        const allPostIds =
+          getActiveRosterFromState(recoilState).posts?.map((p) => p.id) || [];
+        if (allPostIds.length === 0) return;
+        e.preventDefault();
+        enterMulti(allPostIds, "posts");
+        trackEvent("multi-select-start", { kind: "posts", entry: "cmd-a" });
+        trackEvent("cmd-a-select-all", { kind: "posts", count: allPostIds.length });
+      } else if (inStaff) {
+        const allUserIds =
+          (recoilState.userShiftData || []).map((u) => u.user.id);
+        if (allUserIds.length === 0) return;
+        e.preventDefault();
+        enterMulti(allUserIds, "staff");
+        trackEvent("multi-select-start", { kind: "staff", entry: "cmd-a" });
+        trackEvent("cmd-a-select-all", { kind: "staff", count: allUserIds.length });
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [recoilState, enterMulti]);
+
+  // Clear justAddedPostId after a tick so PostHeadRow only auto-focuses once
+  useEffect(() => {
+    if (justAddedPostId) {
+      const id = window.setTimeout(() => consumeJustAddedPostId(), 0);
+      return () => window.clearTimeout(id);
+    }
+  }, [justAddedPostId, consumeJustAddedPostId]);
+
   // Enhanced addUser with toast notification
   const handleAddUser = () => {
     const userName = addUser();
@@ -197,21 +264,13 @@ export function ShiftManager() {
 
   const syncStatus = recoilState.syncStatus;
 
-  const selectedUser = useMemo(() => {
-    return selectedUserId
-      ? recoilState.userShiftData?.find(
-          (userData) => userData.user.id === selectedUserId
-        )
-      : undefined;
-  }, [selectedUserId, recoilState.userShiftData]);
-
   return (
     <TooltipProvider delayDuration={0}>
       <div className="flex flex-col h-full">
       <div
         id="header"
         dir="ltr"
-        className="grid grid-cols-[auto_1fr_auto] gap-x-4 items-start mb-4 flex-none"
+        className="grid grid-cols-[auto_1fr_auto] gap-x-4 items-start mb-2 flex-none"
       >
         <img
           src={tumbleweedIcon}
@@ -301,8 +360,8 @@ export function ShiftManager() {
         </div>
       </div>
       <div id="content" className="flex-1 min-h-0">
-        <Card className="flex flex-row h-full overflow-hidden">
-          <div className="flex flex-col p-2">
+        <Card className="flex flex-row h-full">
+          <div className="flex flex-col pt-5 px-2 pb-2">
             <VerticalActionGroup className="flex-none gap-3">
               <SyncStatusIcon status={syncStatus} size={18} />
               <SharePopup
@@ -333,77 +392,35 @@ export function ShiftManager() {
               </button>
             </VerticalActionGroup>
           </div>
-          <CardContent className="p-4 flex flex-col flex-1 min-h-0 overflow-hidden">
+          <CardContent className="flex flex-col flex-1 min-w-0 min-h-0 p-0 pb-8">
             {/* Shift Assignments - 50% */}
             <div
-              className="flex flex-col min-h-0 overflow-hidden mb-2"
+              className="flex flex-col min-w-0 min-h-0 mb-2 focus:outline-none"
               style={{ height: "58%" }}
               id="assignments-table"
+              data-testid="schedule-section"
+              ref={scheduleGridRef}
+              tabIndex={-1}
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget)
+                  (e.currentTarget as HTMLElement).focus();
+              }}
             >
-              <div className="flex items-center gap-2 mb-2 flex-none">
-                <h3 className="text-lg font-semibold">{t("shiftAssignments")}</h3>
-                <RosterSwitcher />
-                <div className="flex items-center gap-3 text-sm text-foreground bg-muted px-3 py-1 rounded-md whitespace-nowrap">
-                  <span className="font-medium">
-                    {activeRoster.scheduleMode === "7d" ? t("weeklyRoster") : t("singleDay")}
-                  </span>
-                  <span className="text-muted-foreground">|</span>
-                  <span className="font-medium">
-                    {t("postsCount", { count: activeRoster.posts?.length || 0 })}
-                  </span>
-                  <span className="text-muted-foreground">|</span>
-                  <span className="font-medium">
-                    {activeRoster.scheduleMode === "7d"
-                      ? t("shiftsPerDay", { count: scheduleInfo.shiftsCount })
-                      : t("shiftsCount", { count: scheduleInfo.shiftsCount })}
-                  </span>
-                  <span className="text-muted-foreground">|</span>
-                  <span className="font-medium">
-                    {t("shiftDurationLabel", { duration: (isNaN(scheduleInfo.shiftDuration) ? 0 : scheduleInfo.shiftDuration).toFixed(1) })}
-                  </span>
-                </div>
-                {activeRoster.scheduleMode === "7d" && (
-                  <div className="flex rounded-md border border-border overflow-hidden ms-2">
-                    <button
-                      onClick={() => setWeeklyView(false)}
-                      className={`px-2.5 py-1 text-xs font-medium transition-colors ${
-                        !weeklyView ? "bg-primary text-primary-foreground" : "hover:bg-accent"
-                      }`}
-                    >
-                      {t("dailyView")}
-                    </button>
-                    <button
-                      onClick={() => setWeeklyView(true)}
-                      className={`px-2.5 py-1 text-xs font-medium transition-colors ${
-                        weeklyView ? "bg-primary text-primary-foreground" : "hover:bg-accent"
-                      }`}
-                    >
-                      {t("weeklyView")}
-                    </button>
-                  </div>
-                )}
-                <PostListActions
-                  isEditing={isEditing}
-                  onAddPost={handleAddPost}
-                  onRemovePosts={handleRemovePosts}
-                  checkedPostIds={checkedPostIds}
-                  onCheckAll={handlePostCheckAll}
-                />
-                <ActionHint
-                  hasAssignments={assignments.some((post) => post.some((u) => u !== null))}
-                  isOptimized={!!recoilState.optimizationSignature}
-                />
-              </div>
-              <div className="flex-1 border-primary-rounded-lg overflow-hidden relative">
-                {/* Clear assignments button */}
-                {assignments.some((post) => post.some((u) => u !== null)) && (
-                  <button
-                    onClick={() => setIsClearDialogOpen(true)}
-                    className="absolute top-1 end-1 z-20 px-2.5 py-1 rounded-full text-xs text-white bg-gray-900 hover:bg-gray-700 border border-white/30 transition-colors"
-                  >
-                    {t("clearAssignments")}
-                  </button>
-                )}
+              <ScheduleSectionHeader
+                postsCount={activeRoster.posts?.length || 0}
+                shiftsPerDay={scheduleInfo.shiftsCount}
+                shiftDuration={scheduleInfo.shiftDuration}
+                scheduleMode={activeRoster.scheduleMode === "7d" ? "7d" : "24h"}
+                weeklyView={weeklyView}
+                onWeeklyViewChange={setWeeklyView}
+                endSlot={
+                  <ActionHint
+                    hasAssignments={assignments.some((post) => post.some((u) => u !== null))}
+                    isOptimized={!!recoilState.optimizationSignature}
+                  />
+                }
+              />
+              <div className="flex-1 border-primary-rounded-lg relative">
                 {/* Assignment view - either weekly grid or daily table */}
                 <div className="absolute top-0 start-0 w-full h-full">
                   {weeklyView && activeRoster.scheduleMode === "7d" ? (
@@ -438,36 +455,26 @@ export function ShiftManager() {
                         ) || []
                       }
                       userShiftData={recoilState.userShiftData || []}
-                      mode="assignments"
                       assignments={assignments}
                       customCellDisplayNames={activeRoster.customCellDisplayNames}
                       selectedUserId={selectedUserId}
-                      onConstraintsChange={() => {
-                        // Assignment changes handled by table component directly
-                      }}
                       isEditing={isEditing}
                       onPostEdit={handlePostEdit}
-                      checkedPostIds={checkedPostIds}
-                      onPostCheck={handlePostCheck}
-                      onPostUncheck={handlePostUncheck}
+                      onPostDeleteSingle={setPendingDeletePostId}
                       onAssignmentEdit={handleAssignmentNameUpdate}
+                      justAddedPostId={justAddedPostId}
+                      onAddPost={handleAddPost}
+                      allPostIds={activeRoster.posts?.map((p) => p.id) || []}
+                      onBulkDelete={handleRemovePosts}
+                      hasAssignments={assignments.some((post) => post.some((u) => u !== null))}
+                      onClearAssignments={() => setIsClearDialogOpen(true)}
                     />
                   )}
                 </div>
 
-                {/* Glass overlay for Post column header and content */}
+                {/* Glass overlay covering the full schedule area */}
                 <div
-                  className={`absolute top-0 start-0 w-[8rem] bottom-0 backdrop-blur-sm bg-black/25 transition-all duration-300 ${
-                    showShiftSettings
-                      ? "visible opacity-100"
-                      : "invisible opacity-0 pointer-events-none"
-                  }`}
-                  onClick={() => handleCloseShiftSettings()}
-                ></div>
-
-                {/* Glass overlay for assignment content area */}
-                <div
-                  className={`absolute top-0 start-[8rem] end-0 bottom-0 backdrop-blur-sm bg-black/25 transition-all duration-300 ${
+                  className={`absolute inset-0 rounded-[inherit] backdrop-blur-sm bg-black/25 transition-all duration-300 ${
                     showShiftSettings
                       ? "visible opacity-100"
                       : "invisible opacity-0 pointer-events-none"
@@ -486,10 +493,10 @@ export function ShiftManager() {
                   style={{ paddingTop: "0.5rem" }}
                 >
                   <div
-                    className="w-[40rem] max-w-[calc(100%-4rem)] max-h-[calc(100%-1rem)] overflow-auto rounded-lg border-2 border-foreground bg-background/90 backdrop-blur-md shadow-xl"
+                    className="w-[40rem] max-w-[calc(100%-4rem)] rounded-lg border-2 border-border bg-background/90 backdrop-blur-md shadow-xl"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <div className="flex justify-between items-center px-2 pt-1 pb-1 sticky top-0 bg-background/90 backdrop-blur-md z-10">
+                    <div className="flex justify-between items-center px-2 pt-1 pb-1 bg-background/90 backdrop-blur-md">
                       <h4 className="text-base font-semibold text-start">{t("shiftAdjustment")}</h4>
                       <button
                         onClick={handleCloseShiftSettings}
@@ -504,6 +511,8 @@ export function ShiftManager() {
                       startHour={activeRoster.startTime ?? "08:00"}
                       endHour={activeRoster.endTime ?? "16:00"}
                       posts={activeRoster.posts || []}
+                      showToastWithAction={showActionable}
+                      dismissToast={removeToast}
                     />
                   </div>
                 </div>
@@ -538,6 +547,35 @@ export function ShiftManager() {
                     {t("clear")}
                   </Button>
                 </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog
+              open={pendingDeletePostId !== null}
+              onOpenChange={(open) => !open && setPendingDeletePostId(null)}
+            >
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>{t("deletePostConfirmSingle")}</DialogTitle>
+                </DialogHeader>
+                <div className="flex flex-col gap-4">
+                  <p className="text-muted-foreground">{t("onceDeletedNoUndo")}</p>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setPendingDeletePostId(null)}>
+                      {t("no")}
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => {
+                        if (pendingDeletePostId) removeSinglePost(pendingDeletePostId);
+                        setPendingDeletePostId(null);
+                      }}
+                    >
+                      {t("yesPlease")}
+                    </Button>
+                  </div>
+                </div>
               </DialogContent>
             </Dialog>
 
@@ -586,134 +624,126 @@ export function ShiftManager() {
             {/* Staff Section - 40% */}
             <div
               id="staff_section"
-              className="flex flex-col min-h-0 overflow-hidden"
+              data-testid="staff-section"
+              ref={staffListRef}
+              className="flex flex-col min-w-0 min-h-0 focus:outline-none pt-1"
               style={{ height: "40%" }}
+              tabIndex={-1}
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget)
+                  (e.currentTarget as HTMLElement).focus();
+              }}
             >
-              <div className="flex items-center gap-2 flex-none mb-2">
-                <h3 className="text-lg font-semibold">{t("staff")}</h3>
-                <div className="flex items-center gap-3 text-sm text-foreground bg-muted px-3 py-1 rounded-md">
-                  <span className="font-medium">
-                    {t("staffCount", { count: recoilState.userShiftData?.length || 0 })}
-                  </span>
-                  <span className="text-muted-foreground">|</span>
-                  <span className="font-medium">
-                    {(() => {
-                      const staffCount = recoilState.userShiftData?.length || 0;
-                      if (staffCount === 0) return "0";
-                      let totalAssignments = 0;
-                      for (const postAssignments of assignments) {
-                        for (const assignedUserId of postAssignments) {
-                          if (assignedUserId !== null) {
-                            totalAssignments++;
-                          }
-                        }
-                      }
-                      return Math.round(totalAssignments / staffCount);
-                    })()}{" "}
-                    {t("avgShiftsLabel")}
-                  </span>
-                </div>
-                <WorkerListActions
-                  isEditing={isEditing}
-                  onAddUser={handleAddUser}
-                  onRemoveUsers={removeUsers}
-                  onCheckAll={(allWasClicked) => {
-                    setCheckedUserIds(
-                      allWasClicked
-                        ? recoilState.userShiftData?.map(
-                            (userData) => userData.user.id
-                          ) || []
-                        : []
-                    );
-                  }}
-                  checkedUserIds={checkedUserIds}
-                  onResetAllAvailability={resetAllAvailability}
-                />
-              </div>
-              <div className="flex-1 min-h-0">
+              {(() => {
+                const staffCount = recoilState.userShiftData?.length || 0;
+                let totalAssignments = 0;
+                if (staffCount > 0) {
+                  for (const postAssignments of assignments) {
+                    for (const assignedUserId of postAssignments) {
+                      if (assignedUserId !== null) totalAssignments++;
+                    }
+                  }
+                }
+                const avg = staffCount === 0 ? 0 : Math.round(totalAssignments / staffCount);
+                const allUserIds = (recoilState.userShiftData || []).map(
+                  (u) => u.user.id
+                );
+                return (
+                  <StaffSectionHeader
+                    staffCount={staffCount}
+                    avgShifts={avg}
+                    onAdd={handleAddUser}
+                    allUserIds={allUserIds}
+                    onBulkDelete={(ids) => {
+                      removeUsers(ids);
+                      exitMulti();
+                    }}
+                  />
+                );
+              })()}
+              <div className="flex-1 min-h-0 px-1">
                 <SplitScreen
                   id="worker-info"
                   leftWidth="18%"
                   rightWidth="82%"
-                  className="h-full overflow-hidden"
+                  className="h-full"
                   leftPanel={
-                    <WorkerList
-                      users={
-                        recoilState.userShiftData?.map(
-                          (userData) => userData.user
-                        ) || []
-                      }
-                      selectedUserId={selectedUserId}
-                      onSelectUser={handleUserSelect}
-                      onEditUser={() => {}} // Temporarily disabled
-                      onUpdateUserName={updateUserName}
-                      isEditing={isEditing}
-                      checkedUserIds={checkedUserIds}
-                      onCheckUser={(userId, event) => {
-                        const allUserIds = (recoilState.userShiftData || []).map((u) => u.user.id);
-                        const currentIndex = allUserIds.indexOf(userId);
-                        if (event?.shiftKey && lastCheckedUserRef.current !== null) {
-                          const start = Math.min(lastCheckedUserRef.current, currentIndex);
-                          const end = Math.max(lastCheckedUserRef.current, currentIndex);
-                          const rangeIds = allUserIds.slice(start, end + 1);
-                          setCheckedUserIds((prev) => Array.from(new Set([...prev, ...rangeIds])));
-                        } else {
-                          setCheckedUserIds((prev) => [...prev, userId]);
+                  <div className="h-full flex flex-col min-h-0">
+                      <WorkerList
+                        users={
+                          recoilState.userShiftData?.map(
+                            (userData) => userData.user
+                          ) || []
                         }
-                        lastCheckedUserRef.current = currentIndex;
-                      }}
-                      onUncheckUser={(userId) =>
-                        setCheckedUserIds(
-                          checkedUserIds.filter((id) => id !== userId)
-                        )
-                      }
-                      assignments={assignments}
-                    />
+                        selectedUserId={selectedUserId}
+                        onSelectUser={(id) => {
+                          if (id === null) {
+                            // Clear viewing-selection only. We deliberately do
+                            // NOT exitMulti here — WorkerList sends null when
+                            // unchecking the currently-selected row, and other
+                            // rows may still be checked. toggleInMultiPure
+                            // already auto-exits when the set reaches empty.
+                            handleUserSelect(null);
+                          } else {
+                            if (multiSelectKind !== "staff" && selectedUserId === null) {
+                              trackEvent("multi-select-start", {
+                                kind: "staff",
+                                entry: "row-click",
+                              });
+                            }
+                            handleStaffRowClick(id);
+                          }
+                        }}
+                        onUpdateUserName={updateUserName}
+                        checkedUserIds={checkedUserIds}
+                        inStaffMulti={inMulti("staff")}
+                        onCheckUser={(userId, event) => {
+                          const allUserIds = (recoilState.userShiftData || []).map((u) => u.user.id);
+                          const currentIndex = allUserIds.indexOf(userId);
+                          if (event?.shiftKey && lastCheckedUserRef.current !== null) {
+                            const start = Math.min(lastCheckedUserRef.current, currentIndex);
+                            const end = Math.max(lastCheckedUserRef.current, currentIndex);
+                            const rangeIds = allUserIds.slice(start, end + 1);
+                            const existing = isMultiChecked(userId, "staff") || multiSelectKind === "staff"
+                              ? Array.from(multiSelected ?? [])
+                              : [];
+                            enterMulti(Array.from(new Set([...existing, ...rangeIds])), "staff");
+                            trackEvent("multi-select-start", { kind: "staff", entry: "checkbox" });
+                          } else if (multiSelectKind === "staff") {
+                            if (!multiSelected?.has(userId)) toggleInMulti(userId);
+                          } else {
+                            enterMulti([userId], "staff");
+                            trackEvent("multi-select-start", { kind: "staff", entry: "checkbox" });
+                          }
+                          lastCheckedUserRef.current = currentIndex;
+                        }}
+                        onUncheckUser={(userId) => {
+                          if (multiSelectKind === "staff" && multiSelected?.has(userId)) {
+                            toggleInMulti(userId);
+                          }
+                        }}
+                        assignments={assignments}
+                      />
+                    </div>
                   }
                   rightPanel={
-                    <AvailabilityTableView
-                      key={`availability-${selectedUserId}-${
-                        recoilState.userShiftData
-                          ?.map((u) => u.user.name)
-                          .join("-") || "no-users"
-                      }`}
-                      user={
-                        selectedUserId
-                          ? recoilState.userShiftData?.find(
-                              (u) => u.user.id === selectedUserId
-                            )?.user
-                          : undefined
-                      }
-                      availabilityConstraints={selectedUser?.constraintsByRoster?.[recoilState.activeRosterId] || selectedUser?.constraints}
-                      posts={activeRoster.posts}
-                      hours={activeRoster.hours || defaultHours}
-                      endTime={activeRoster.endTime}
-                      userShiftData={recoilState.userShiftData || []}
-                      mode="availability"
-                      onConstraintsChange={(newConstraints) => {
-                        if (selectedUser) {
-                          updateUserConstraints(
-                            selectedUser.user.id,
-                            newConstraints
-                          );
+                    <div className="h-full flex flex-col min-h-0">
+                      <AvailabilityHeatmap
+                        posts={activeRoster.posts}
+                        hours={activeRoster.hours || defaultHours}
+                        endTime={activeRoster.endTime}
+                        userShiftData={recoilState.userShiftData || []}
+                        onConstraintsChange={(userId, newConstraints) =>
+                          updateUserConstraints(userId, newConstraints)
                         }
-                      }}
-                      isEditing={isEditing}
-                      onPostEdit={handlePostEdit}
-                      selectedUserId={selectedUserId}
-                      users={
-                        recoilState.userShiftData?.map(
-                          (userData) => userData.user
-                        ) || []
-                      }
-                      onPostCheck={handlePostCheck}
-                      onPostUncheck={handlePostUncheck}
-                      onShowToast={(message, type) => {
-                        if (type === "success") showSuccess(message);
-                        else if (type === "error") showError(message);
-                        else showInfo(message);
-                      }}
-                    />
+                        onShowToast={(message, type) => {
+                          if (type === "success") showSuccess(message);
+                          else if (type === "error") showError(message);
+                          else showInfo(message);
+                        }}
+                        onResetAvailability={resetAvailabilityForUsers}
+                      />
+                    </div>
                   }
                 />
               </div>
@@ -800,6 +830,23 @@ export function ShiftManager() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ContextMenuRoot
+        handlers={{
+          onCopyName: (kind, targetId) => {
+            const text =
+              kind === "posts"
+                ? activeRoster.posts?.find((p) => p.id === targetId)?.value ?? ""
+                : recoilState.userShiftData?.find((u) => u.user.id === targetId)?.user.name ?? "";
+            if (text && navigator.clipboard) {
+              void navigator.clipboard.writeText(text);
+            }
+          },
+          onDelete: (kind, targetId) => {
+            if (kind === "posts") setPendingDeletePostId(targetId);
+            else removeSingleUser(targetId);
+          },
+        }}
+      />
       </div>
     </TooltipProvider>
   );

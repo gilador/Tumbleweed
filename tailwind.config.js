@@ -50,6 +50,8 @@ module.exports = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        "border-strong": "hsl(var(--border-strong))",
+        "primary-soft": "hsl(var(--primary-soft))",
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -69,11 +71,16 @@ module.exports = {
           "0%": { transform: "translateY(-100%)", opacity: "0" },
           "100%": { transform: "translateY(0)", opacity: "1" },
         },
+        "slide-up": {
+          "0%": { transform: "translateY(0)", opacity: "1" },
+          "100%": { transform: "translateY(-100%)", opacity: "0" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "slide-down": "slide-down 0.5s ease-out",
+        "slide-down": "slide-down 0.15s ease-out",
+        "slide-up": "slide-up 0.15s ease-in forwards",
       },
     },
   },

@@ -1,342 +1,160 @@
 import { test, expect } from "@playwright/test";
+import {
+  STAFF_ROW,
+  installInitScript,
+  waitForApp,
+  clickStaffRow,
+  postNameLocators,
+  clickPostRow,
+  bulkRegion,
+} from "./helpers";
+
+// Re-authored: legacy "Staff (n)" / "Staff (n, k selected)" heading copy is
+// gone. Selection state lives on BulkSelectionBar which renders
+// `^N selected$` text and exposes a region with the same aria-label.
+
+test.beforeEach(async ({ page }) => {
+  await installInitScript(page);
+});
 
 test.describe("Selected Items Count Display", () => {
   test("shows selected staff count when more than 1 staff member is selected", async ({
     page,
   }) => {
-    await page.goto("/");
+    await waitForApp(page);
 
-    // Wait for app to load
-    await expect(page.getByRole("main")).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: /Staff \(\d+\)/ })
-    ).toBeVisible();
+    const rows = page.locator(STAFF_ROW);
+    const total = await rows.count();
+    test.skip(total < 3, "need at least 3 staff rows");
 
-    // Enter edit mode
-    const editToggleButton = page
-      .getByRole("button", { name: "Enter edit mode" })
-      .first();
-    await editToggleButton.click();
+    // Initially, no bulk bar.
+    await expect(page.getByText(/^\d+ selected$/)).toHaveCount(0);
 
-    // Wait for edit mode to activate
-    await expect(page.getByRole("button", { name: "Add user" })).toBeVisible();
+    // Click 1st row → enters single-select mode (no bulk bar yet).
+    await clickStaffRow(page, 0);
 
-    // Initially, no selected count should be shown
-    await expect(
-      page.getByRole("heading", { name: /Staff \(\d+\)$/ })
-    ).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: /Staff \(\d+, \d+ selected\)/ })
-    ).not.toBeVisible();
+    // Click 2nd → upgrades to multi mode with 2 selected.
+    await clickStaffRow(page, 1);
+    await expect(page.getByText(/^2 selected$/).first()).toBeVisible();
 
-    // Select first staff member - should now show selected count (1 selected)
-    const staffMembers = page.locator('[data-testid="staff-member"]');
-    const firstCheckbox = staffMembers.nth(0).getByRole("checkbox");
-    await firstCheckbox.click();
+    // Click 3rd → 3 selected.
+    await clickStaffRow(page, 2);
+    await expect(page.getByText(/^3 selected$/).first()).toBeVisible();
 
-    // Should now show "1 selected"
-    await expect(
-      page.getByRole("heading", { name: /Staff \(\d+, 1 selected\)/ })
-    ).toBeVisible();
+    // Toggle 3rd off → back to 2.
+    await clickStaffRow(page, 2);
+    await expect(page.getByText(/^2 selected$/).first()).toBeVisible();
 
-    // Select second staff member - now should show selected count
-    const secondCheckbox = staffMembers.nth(1).getByRole("checkbox");
-    await secondCheckbox.click();
+    // Toggle 2nd off → 1 selected (still in multi mode).
+    await clickStaffRow(page, 1);
+    await expect(page.getByText(/^1 selected$/).first()).toBeVisible();
 
-    // Should now show "2 selected"
-    await expect(
-      page.getByRole("heading", { name: /Staff \(\d+, 2 selected\)/ })
-    ).toBeVisible();
-
-    // Select third staff member - should update to "3 selected"
-    const thirdCheckbox = staffMembers.nth(2).getByRole("checkbox");
-    await thirdCheckbox.click();
-
-    await expect(
-      page.getByRole("heading", { name: /Staff \(\d+, 3 selected\)/ })
-    ).toBeVisible();
-
-    // Unselect one - should show "2 selected"
-    await thirdCheckbox.click();
-
-    await expect(
-      page.getByRole("heading", { name: /Staff \(\d+, 2 selected\)/ })
-    ).toBeVisible();
-
-    // Unselect another - should show "1 selected" (1 left)
-    await secondCheckbox.click();
-
-    await expect(
-      page.getByRole("heading", { name: /Staff \(\d+, 1 selected\)/ })
-    ).toBeVisible();
-
-    // Unselect the last one - should hide selected count (0 selected)
-    await firstCheckbox.click();
-
-    await expect(
-      page.getByRole("heading", { name: /Staff \(\d+\)$/ })
-    ).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: /Staff \(\d+, \d+ selected\)/ })
-    ).not.toBeVisible();
-
-    // Exit edit mode
-    await editToggleButton.click();
+    // Cancel selection — bulk bar disappears.
+    await page.getByRole("button", { name: /Cancel selection/i }).first().click();
+    await expect(page.getByText(/^\d+ selected$/)).toHaveCount(0);
   });
 
   test("shows selected posts count when more than 1 post is selected", async ({
     page,
   }) => {
-    await page.goto("/");
+    await waitForApp(page);
 
-    // Wait for app to load
-    await expect(page.getByRole("main")).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: /Shift Assignments \(\d+\)/ })
-    ).toBeVisible();
+    const posts = postNameLocators(page);
+    const postCount = await posts.count();
+    test.skip(postCount < 2, "need at least 2 posts to multi-select");
 
-    // Enter edit mode
-    const editToggleButton = page
-      .getByRole("button", { name: "Enter edit mode" })
-      .first();
-    await editToggleButton.click();
+    // No bulk bar initially.
+    await expect(page.getByText(/^\d+ selected$/)).toHaveCount(0);
 
-    // Wait for edit mode to activate
-    await expect(page.getByRole("button", { name: "Add user" })).toBeVisible();
+    await clickPostRow(page, 0);
+    await expect(page.getByText(/^1 selected$/).first()).toBeVisible();
 
-    // Initially, no selected count should be shown
-    await expect(
-      page.getByRole("heading", { name: /Shift Assignments \(\d+\)$/ })
-    ).toBeVisible();
-    await expect(
-      page.getByRole("heading", {
-        name: /Shift Assignments \(\d+, \d+ selected\)/,
-      })
-    ).not.toBeVisible();
+    await clickPostRow(page, 1);
+    await expect(page.getByText(/^2 selected$/).first()).toBeVisible();
 
-    // Find posts in the assignments section
-    const assignmentsSection = page
-      .locator('text="Shift Assignments"')
-      .locator("..")
-      .locator("..");
+    if (postCount >= 3) {
+      await clickPostRow(page, 2);
+      await expect(page.getByText(/^3 selected$/).first()).toBeVisible();
 
-    const postCheckboxes = assignmentsSection.getByRole("checkbox");
-    const postCount = await postCheckboxes.count();
-
-    if (postCount >= 2) {
-      // Select first post - should now show selected count (1 selected)
-      await postCheckboxes.nth(0).click();
-
-      // Should now show "1 selected"
-      await expect(
-        page.getByRole("heading", {
-          name: /Shift Assignments \(\d+, 1 selected\)/,
-        })
-      ).toBeVisible();
-
-      // Select second post - now should show selected count
-      await postCheckboxes.nth(1).click();
-
-      // Should now show "2 selected"
-      await expect(
-        page.getByRole("heading", {
-          name: /Shift Assignments \(\d+, 2 selected\)/,
-        })
-      ).toBeVisible();
-
-      if (postCount >= 3) {
-        // Select third post - should update to "3 selected"
-        await postCheckboxes.nth(2).click();
-
-        await expect(
-          page.getByRole("heading", {
-            name: /Shift Assignments \(\d+, 3 selected\)/,
-          })
-        ).toBeVisible();
-
-        // Unselect one - should show "2 selected"
-        await postCheckboxes.nth(2).click();
-
-        await expect(
-          page.getByRole("heading", {
-            name: /Shift Assignments \(\d+, 2 selected\)/,
-          })
-        ).toBeVisible();
-      }
-
-      // Unselect to get back to 1 - should show "1 selected"
-      await postCheckboxes.nth(1).click();
-
-      await expect(
-        page.getByRole("heading", {
-          name: /Shift Assignments \(\d+, 1 selected\)/,
-        })
-      ).toBeVisible();
-
-      // Unselect the last one - should hide selected count
-      await postCheckboxes.nth(0).click();
-
-      await expect(
-        page.getByRole("heading", { name: /Shift Assignments \(\d+\)$/ })
-      ).toBeVisible();
-      await expect(
-        page.getByRole("heading", {
-          name: /Shift Assignments \(\d+, \d+ selected\)/,
-        })
-      ).not.toBeVisible();
+      await clickPostRow(page, 2);
+      await expect(page.getByText(/^2 selected$/).first()).toBeVisible();
     }
 
-    // Exit edit mode
-    await editToggleButton.click();
+    await clickPostRow(page, 1);
+    await expect(page.getByText(/^1 selected$/).first()).toBeVisible();
+
+    await clickPostRow(page, 0);
+    await expect(page.getByText(/^\d+ selected$/)).toHaveCount(0);
   });
 
-  test("selected count behavior when toggling edit mode", async ({ page }) => {
-    await page.goto("/");
+  test("Cancel button restores empty selection state", async ({ page }) => {
+    await waitForApp(page);
 
-    // Wait for app to load
-    await expect(page.getByRole("main")).toBeVisible();
+    const rows = page.locator(STAFF_ROW);
+    test.skip((await rows.count()) < 2, "need at least 2 staff rows");
 
-    // Enter edit mode
-    const editToggleButton = page
-      .getByRole("button", { name: "Enter edit mode" })
-      .first();
-    await editToggleButton.click();
+    await clickStaffRow(page, 0);
+    await clickStaffRow(page, 1);
+    await expect(page.getByText(/^2 selected$/).first()).toBeVisible();
 
-    // Wait for edit mode to activate
-    await expect(page.getByRole("button", { name: "Add user" })).toBeVisible();
+    await page.getByRole("button", { name: /Cancel selection/i }).first().click();
+    await expect(page.getByText(/^\d+ selected$/)).toHaveCount(0);
 
-    // Select multiple staff members
-    const staffMembers = page.locator('[data-testid="staff-member"]');
-    const firstCheckbox = staffMembers.nth(0).getByRole("checkbox");
-    const secondCheckbox = staffMembers.nth(1).getByRole("checkbox");
-
-    await firstCheckbox.click();
-    await secondCheckbox.click();
-
-    // Should show selected count
-    await expect(
-      page.getByRole("heading", { name: /Staff \(\d+, 2 selected\)/ })
-    ).toBeVisible();
-
-    // Exit edit mode
-    await editToggleButton.click();
-
-    // Wait for edit mode to fully exit
-    await page.waitForTimeout(500);
-
-    // Re-enter edit mode to test that selections can be made again
-    await editToggleButton.click();
-    await expect(page.getByRole("button", { name: "Add user" })).toBeVisible();
-
-    // The title should be visible (whether with or without selected count is implementation dependent)
-    await expect(
-      page.getByRole("heading", { name: /Staff \(\d+/ })
-    ).toBeVisible();
-
-    // Exit edit mode
-    await editToggleButton.click();
+    // Multi-select can be re-entered with two clicks.
+    await clickStaffRow(page, 0);
+    await clickStaffRow(page, 1);
+    await expect(page.getByText(/^2 selected$/).first()).toBeVisible();
   });
 
   test("select all functionality updates the selected count correctly", async ({
     page,
   }) => {
-    await page.goto("/");
+    await waitForApp(page);
 
-    // Wait for app to load
-    await expect(page.getByRole("main")).toBeVisible();
+    const totalStaff = await page.locator(STAFF_ROW).count();
+    test.skip(totalStaff < 2, "need at least 2 staff rows");
 
-    // Enter edit mode
-    const editToggleButton = page
-      .getByRole("button", { name: "Enter edit mode" })
-      .first();
-    await editToggleButton.click();
+    // Enter multi-select first by clicking two rows (single→multi upgrade),
+    // then use Select all toggle.
+    await clickStaffRow(page, 0);
+    await clickStaffRow(page, 1);
+    const region = bulkRegion(page);
+    await expect(region).toBeVisible();
 
-    // Wait for edit mode to activate
-    await expect(page.getByRole("button", { name: "Add user" })).toBeVisible();
-
-    // Get initial staff count
-    const staffTitle = await page
-      .getByRole("heading", { name: /Staff \(\d+\)/ })
-      .textContent();
-    const totalStaffCount = parseInt(
-      staffTitle?.match(/Staff \((\d+)\)/)?.[1] || "0"
-    );
-
-    // Use select all button for staff
-    const selectAllUsersButton = page.getByRole("button", {
-      name: "Select all users",
-    });
-    await selectAllUsersButton.click();
-
-    // Should show all staff selected (if more than 1)
-    if (totalStaffCount > 1) {
-      await expect(
-        page.getByRole("heading", {
-          name: new RegExp(
-            `Staff \\(${totalStaffCount}, ${totalStaffCount} selected\\)`
-          ),
-        })
-      ).toBeVisible();
+    if ((await region.getByRole("button", { name: /^Select all$/i }).count()) > 0) {
+      await region.getByRole("button", { name: /^Select all$/i }).click();
     }
-
-    // Click select all again to deselect all
-    await selectAllUsersButton.click();
-
-    // Should not show selected count
+    // After select-all the count badge equals total staff.
     await expect(
-      page.getByRole("heading", { name: /Staff \(\d+\)$/ })
+      page.getByText(new RegExp(`^${totalStaff} selected$`)).first()
     ).toBeVisible();
+    // Toggle now reads "Deselect all users".
     await expect(
-      page.getByRole("heading", { name: /Staff \(\d+, \d+ selected\)/ })
-    ).not.toBeVisible();
+      region.getByRole("button", { name: /^Deselect all users$/i })
+    ).toBeVisible();
 
-    // Exit edit mode
-    await editToggleButton.click();
+    // Click again to deselect everyone.
+    await region.getByRole("button", { name: /^Deselect all users$/i }).click();
+    await expect(page.getByText(/^\d+ selected$/)).toHaveCount(0);
   });
 
   test("selected count format is correct", async ({ page }) => {
-    await page.goto("/");
+    await waitForApp(page);
 
-    // Wait for app to load
-    await expect(page.getByRole("main")).toBeVisible();
+    const rows = page.locator(STAFF_ROW);
+    test.skip((await rows.count()) < 2, "need at least 2 staff rows");
 
-    // Enter edit mode
-    const editToggleButton = page
-      .getByRole("button", { name: "Enter edit mode" })
-      .first();
-    await editToggleButton.click();
+    await clickStaffRow(page, 0);
+    await clickStaffRow(page, 1);
 
-    // Wait for edit mode to activate
-    await expect(page.getByRole("button", { name: "Add user" })).toBeVisible();
+    const region = bulkRegion(page);
+    await expect(region).toBeVisible();
 
-    // Select multiple staff members
-    const staffMembers = page.locator('[data-testid="staff-member"]');
-    await staffMembers.nth(0).getByRole("checkbox").click();
-    await staffMembers.nth(1).getByRole("checkbox").click();
+    // The region's aria-label is the selected count copy itself.
+    const ariaLabel = await region.first().getAttribute("aria-label");
+    expect(ariaLabel).toMatch(/^\d+ selected$/);
 
-    // Get the title text and verify format
-    const titleElement = page.getByRole("heading", {
-      name: /Staff \(\d+, \d+ selected\)/,
-    });
-    await expect(titleElement).toBeVisible();
-
-    const titleText = await titleElement.textContent();
-
-    // Should match format: "Staff (total, selected selected)"
-    expect(titleText).toMatch(/^Staff \(\d+, \d+ selected\)$/);
-
-    // Verify the numbers make sense
-    const match = titleText?.match(/Staff \((\d+), (\d+) selected\)/);
-    if (match) {
-      const totalCount = parseInt(match[1]);
-      const selectedCount = parseInt(match[2]);
-
-      expect(selectedCount).toBeGreaterThan(0); // Should show when > 0
-      expect(selectedCount).toBeLessThanOrEqual(totalCount); // Can't select more than total
-      expect(selectedCount).toBe(2); // We selected 2 items
-    }
-
-    // Exit edit mode
-    await editToggleButton.click();
+    // Visible count text inside the bar matches "2 selected".
+    await expect(page.getByText(/^2 selected$/).first()).toBeVisible();
   });
 });

@@ -1,15 +1,16 @@
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useRecoilState } from "recoil";
 import { shiftState, getActiveRosterFromState } from "../stores/shiftStore";
+import { selectedStaffIdState } from "../stores/selectionStore";
 import { UserShiftData, Constraint } from "../models";
 import { defaultHours } from "../constants/shiftManagerConstants";
 import { getDefaultConstraints } from "../service/shiftManagerUtils";
+import { trackEvent } from "../lib/analytics";
 
 export function useUserHandlers() {
   const { t } = useTranslation();
   const [recoilState, setRecoilState] = useRecoilState(shiftState);
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedUserId, setSelectedUserId] = useRecoilState(selectedStaffIdState);
 
   const addUser = () => {
     const currentUserCount = recoilState.userShiftData?.length || 0;
@@ -90,23 +91,37 @@ export function useUserHandlers() {
     }));
   };
 
+  const removeSingleUser = (userId: string) => {
+    trackEvent("user-delete-single", {});
+    setRecoilState((prev) => ({
+      ...prev,
+      userShiftData: (prev.userShiftData || []).filter(
+        (userData) => userData.user.id !== userId
+      ),
+    }));
+    if (selectedUserId === userId) setSelectedUserId(null);
+  };
+
   const handleUserSelect = (userId: string | null) => {
     console.log("handleUserSelect called with userId:", userId);
     setSelectedUserId(userId);
   };
 
-  const resetAllAvailability = () => {
+  const resetAvailabilityForUsers = (userIds: string[]) => {
     setRecoilState((prev) => {
-      // Reset constraints for ALL rosters
+      const idSet = new Set(userIds);
+      const activeRoster = getActiveRosterFromState(prev);
       const updatedUserShiftData = (prev.userShiftData || []).map((userData) => {
-        const newConstraintsByRoster: Record<string, Constraint[][]> = {};
+        if (!idSet.has(userData.user.id)) return userData;
+        const newConstraintsByRoster: Record<string, Constraint[][]> = {
+          ...(userData.constraintsByRoster || {}),
+        };
         for (const roster of prev.rosters) {
           newConstraintsByRoster[roster.id] = getDefaultConstraints(
             roster.posts || [],
             roster.hours || defaultHours
           );
         }
-        const activeRoster = getActiveRosterFromState(prev);
         return {
           ...userData,
           constraints: newConstraintsByRoster[prev.activeRosterId] || getDefaultConstraints(
@@ -130,7 +145,8 @@ export function useUserHandlers() {
     updateUserConstraints,
     updateUserName,
     removeUsers,
+    removeSingleUser,
     handleUserSelect,
-    resetAllAvailability,
+    resetAvailabilityForUsers,
   };
 }

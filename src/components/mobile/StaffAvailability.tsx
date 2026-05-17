@@ -10,6 +10,13 @@ import { DayTabStrip, DayIndicator } from "../DayTabStrip";
 import { AvailabilityCopyBar } from "../AvailabilityCopyBar";
 import { getDaySlice, getDisplayTime } from "../../service/weeklyScheduleUtils";
 import { getTodayISO } from "../../service/dayLabelUtils";
+import { trackEvent } from "../../lib/analytics";
+import { formatTimeRange } from "../../lib/formatTimeRange";
+
+// Israeli workweek — hard-coded, NOT locale-derived (locale = UI language, not calendar).
+// Sun(0) Mon(1) Tue(2) Wed(3) Thu(4) | Fri(5) Sat(6)
+const ISRAELI_WEEKDAYS = [0, 1, 2, 3, 4] as const;
+const ISRAELI_WEEKENDS = [5, 6] as const;
 
 interface StaffAvailabilityProps {
   userId: string;
@@ -28,7 +35,8 @@ export function StaffAvailability({
   onBack,
   onUpdateConstraints,
 }: StaffAvailabilityProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const dir: "ltr" | "rtl" = i18n.language === "he" ? "rtl" : "ltr";
   const shiftStateValue = useRecoilValue(shiftState);
   const activeRoster = getActiveRosterFromState(shiftStateValue);
   const scheduleMode = activeRoster.scheduleMode;
@@ -79,8 +87,50 @@ export function StaffAvailability({
         postConstraints.map((c) => ({ ...c, availability: available }))
       );
       onUpdateConstraints(userId, newConstraints);
+      trackEvent("staff-bulk-action", {
+        action: available ? "all-available" : "all-unavailable",
+      });
     },
     [userData, userId, onUpdateConstraints]
+  );
+
+  const setDaysOnly = useCallback(
+    (availableDays: readonly number[]) => {
+      if (!userData) return;
+      const isWeekendsOnly = availableDays === ISRAELI_WEEKENDS;
+      if (!isWeekly) {
+        // 24h: no day axis. Weekdays-only → all available; weekends-only → all unavailable.
+        const allAvailable = !isWeekendsOnly;
+        const newConstraints = userData.constraints.map((postConstraints) =>
+          postConstraints.map((c) => ({ ...c, availability: allAvailable }))
+        );
+        onUpdateConstraints(userId, newConstraints);
+        trackEvent("staff-bulk-action", {
+          action: isWeekendsOnly ? "weekends-only" : "weekdays-only",
+        });
+        return;
+      }
+      const daySlices = Array.from({ length: 7 }, (_, dayIdx) =>
+        getDaySlice(hours.length, dayIdx)
+      );
+      const dayForHour = (hIdx: number): number => {
+        for (let d = 0; d < daySlices.length; d++) {
+          if (hIdx >= daySlices[d].start && hIdx < daySlices[d].end) return d;
+        }
+        return -1;
+      };
+      const newConstraints = userData.constraints.map((postCons) =>
+        postCons.map((c, hIdx) => ({
+          ...c,
+          availability: availableDays.includes(dayForHour(hIdx)),
+        }))
+      );
+      onUpdateConstraints(userId, newConstraints);
+      trackEvent("staff-bulk-action", {
+        action: isWeekendsOnly ? "weekends-only" : "weekdays-only",
+      });
+    },
+    [userData, userId, onUpdateConstraints, isWeekly, hours.length]
   );
 
   if (!userData) {
@@ -95,15 +145,15 @@ export function StaffAvailability({
     );
   }
 
-  const formatTimeRange = (hourIndex: number): string => {
+  const buildTimeRangeLabel = (hourIndex: number): string => {
     const rawStart = hours[hourIndex]?.value || "";
     const startTime = isWeekly ? getDisplayTime(rawStart) : rawStart;
     const nextHour = hours[hourIndex + 1];
     if (nextHour) {
       const end = isWeekly ? getDisplayTime(nextHour.value) : nextHour.value;
-      return `${startTime} → ${end}`;
+      return formatTimeRange(startTime, end, dir);
     }
-    return `${startTime} →`;
+    return formatTimeRange(startTime, undefined, dir);
   };
 
   const handleCopyAvailability = (targetDayIndices: number[]) => {
@@ -174,21 +224,37 @@ export function StaffAvailability({
       )}
 
       {/* Bulk actions */}
-      <div className="flex gap-2 px-4 py-3 flex-none">
-        <button
-          onClick={() => setAll(true)}
-          className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-border text-sm min-h-[44px] hover:bg-accent"
-        >
-          <IconCheck size={16} className="text-green-600" />
-          {t("allAvailable")}
-        </button>
-        <button
-          onClick={() => setAll(false)}
-          className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-border text-sm min-h-[44px] hover:bg-accent"
-        >
-          <IconX size={16} className="text-red-500" />
-          {t("allUnavailable")}
-        </button>
+      <div className="flex flex-col gap-2 px-4 py-3 flex-none">
+        <div className="flex gap-2">
+          <button
+            onClick={() => setAll(true)}
+            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-border text-sm min-h-[44px] hover:bg-accent"
+          >
+            <IconCheck size={16} className="text-green-600" />
+            {t("allAvailable")}
+          </button>
+          <button
+            onClick={() => setAll(false)}
+            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-border text-sm min-h-[44px] hover:bg-accent"
+          >
+            <IconX size={16} className="text-red-500" />
+            {t("allUnavailable")}
+          </button>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setDaysOnly(ISRAELI_WEEKDAYS)}
+            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-border text-sm min-h-[44px] hover:bg-accent"
+          >
+            {t("weekdaysOnly")}
+          </button>
+          <button
+            onClick={() => setDaysOnly(ISRAELI_WEEKENDS)}
+            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-border text-sm min-h-[44px] hover:bg-accent"
+          >
+            {t("weekendsOnly")}
+          </button>
+        </div>
       </div>
 
       {/* Post sections */}
@@ -223,7 +289,7 @@ export function StaffAvailability({
                       onClick={() => toggleSlot(postIndex, flatIndex)}
                       className="flex items-center justify-between w-full px-4 min-h-[48px] hover:bg-accent/50 transition-colors"
                     >
-                      <span className="text-sm" dir="ltr">{formatTimeRange(flatIndex)}</span>
+                      <span className="text-sm">{buildTimeRangeLabel(flatIndex)}</span>
                       <span
                         className={`flex items-center justify-center w-8 h-8 rounded-full ${
                           constraint.availability
