@@ -6,13 +6,13 @@ export const colors = {
   },
   // Available but unassigned cells
   available: {
-    default: "bg-background border border-foreground",
-    hover: "hover:bg-accent",
+    default: "bg-foreground text-background",
+    hover: "hover:bg-foreground/85",
   },
   // Unavailable cells
   unavailable: {
-    default: "bg-foreground",
-    hover: "hover:bg-foreground/80",
+    default: "bg-destructive/10 text-destructive",
+    hover: "hover:bg-destructive/20",
   },
   // Selected user cells
   selected: {

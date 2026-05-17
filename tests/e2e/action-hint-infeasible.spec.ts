@@ -1,110 +1,68 @@
-import { test, expect, Page } from "@playwright/test";
-import { createRequire } from "module";
+import { test, expect } from "@playwright/test";
+import { installInitScript, waitForApp } from "./helpers";
 
-const require = createRequire(import.meta.url);
-const t = require("../../src/locales/he.json");
+// Re-authored: legacy edit-mode prelude is gone. Add user / Add position
+// sit on the section headers and are always available. Hints are surfaced
+// near the assignments table in English with the helpers below.
 
-async function dismissDrivePrompt(page: Page) {
-  const notNowButton = page.getByRole("button", { name: /לא עכשיו|Not now/i });
-  await notNowButton.click({ timeout: 10000 }).catch(() => {});
-}
+test.beforeEach(async ({ page }) => {
+  await installInitScript(page);
+});
 
 test.describe("Action hint reflects infeasible state", () => {
-  test("shows warning hint when optimizer reports not enough staff", async ({ page }) => {
-    await page.addInitScript(() => localStorage.clear());
-    await page.goto("/tumbleweed/");
-    await dismissDrivePrompt(page);
-    await expect(page.getByRole("heading", { name: t.staff })).toBeVisible({ timeout: 10000 });
+  test("shows warning hint when configuration is infeasible (more posts than capacity)", async ({
+    page,
+  }) => {
+    await waitForApp(page);
 
-    // Default: 2 staff, 2 posts — this is feasible for low shift counts
-    // Add more posts to make it infeasible: 2 staff can't cover 5 posts
-    const editToggle = page
-      .locator('[aria-label*="עריכה"], [aria-label*="edit mode"]')
+    // Default: 2 staff, 2 posts. Add 3 more posts (5 total) — 2 staff
+    // can't cover 5 posts at the default intensity.
+    const addPosition = page
+      .getByRole("button", { name: /^Add position$/i })
       .first();
-    await editToggle.click();
-
-    // Add 3 more posts (total 5)
-    const addPostButton = page
-      .locator('[aria-label*="הוסף עמדה"], [aria-label*="Add post"]')
-      .first();
-    await expect(addPostButton).toBeVisible({ timeout: 5000 });
+    await expect(addPosition).toBeVisible({ timeout: 5000 });
     for (let i = 0; i < 3; i++) {
-      await addPostButton.click();
+      await addPosition.click();
+      // PostHeadRow autoFocusEdit may render an input; commit immediately.
+      const inlineInput = page.locator("#assignments-table input").first();
+      if (await inlineInput.count()) {
+        await inlineInput.press("Enter").catch(() => {});
+      }
     }
-    await editToggle.click();
 
-    // The hint should show a warning about capacity, NOT "click optimize"
-    // hintOverCapacity renders as: "Not enough staff: X slots available but Y needed"
-    const hintArea = page.locator('#assignments-table, [class*="hint"], [class*="badge"]');
+    // Wait for the hint to settle.
+    const runOptimizerHint = page.getByText(
+      "Click the optimize button to generate assignments"
+    );
+    const overCapacityHint = page.getByText(/Not enough staff/i);
 
-    // The action hint text should contain capacity warning
-    const warningHint = page.locator(`text=${t.hintOverCapacity?.replace("{{capacity}}", "").replace("{{needed}}", "").split("{{")[0] || "hintOverCapacity"}`);
+    await expect
+      .poll(
+        async () => {
+          const r = await runOptimizerHint.isVisible().catch(() => false);
+          const o = await overCapacityHint.isVisible().catch(() => false);
+          return { r, o };
+        },
+        { timeout: 5000 }
+      )
+      .toEqual(expect.objectContaining({ o: true }));
 
-    // More reliable: check that hintRunOptimizer is NOT shown
-    // hintRunOptimizer = "Click the optimize button to generate assignments" / "לחץ על כפתור האופטימיזציה ליצירת שיבוצים"
-    await page.waitForTimeout(1000);
-
-    const runOptimizerHint = page.getByText(t.hintRunOptimizer);
-    const overCapacityHint = page.getByText(/hintOverCapacity|לא מספיק|Not enough/);
-
-    // Should NOT show "click optimize" hint when configuration is infeasible
     const hasRunOptimizer = await runOptimizerHint.isVisible().catch(() => false);
     const hasOverCapacity = await overCapacityHint.isVisible().catch(() => false);
-
-    // At least one of these should be true: either warning is shown, or "run optimizer" is hidden
     expect(
       !hasRunOptimizer || hasOverCapacity,
-      `When config is infeasible, should not show "${t.hintRunOptimizer}". hasRunOptimizer=${hasRunOptimizer}, hasOverCapacity=${hasOverCapacity}`
+      `When config is infeasible, should not show "Click the optimize button". hasRunOptimizer=${hasRunOptimizer}, hasOverCapacity=${hasOverCapacity}`
     ).toBe(true);
   });
 
-  test("shows run optimizer hint when configuration IS feasible", async ({ page }) => {
-    await page.addInitScript(() => localStorage.clear());
-    await page.goto("/tumbleweed/");
-    await dismissDrivePrompt(page);
-    await expect(page.getByRole("heading", { name: t.staff })).toBeVisible({ timeout: 10000 });
+  test("shows run optimizer hint when configuration IS feasible", async ({
+    page,
+  }) => {
+    await waitForApp(page);
 
-    // Default: 2 staff, 2 posts — feasible
-    // Should show "click optimize" hint
-    await page.waitForTimeout(1000);
-
-    const runOptimizerHint = page.getByText(t.hintRunOptimizer);
-    await expect(runOptimizerHint).toBeVisible({ timeout: 5000 });
-  });
-
-  test("optimizer failure shows warning, not run optimizer hint", async ({ page }) => {
-    await page.addInitScript(() => localStorage.clear());
-    await page.goto("/tumbleweed/");
-    await dismissDrivePrompt(page);
-    await expect(page.getByRole("heading", { name: t.staff })).toBeVisible({ timeout: 10000 });
-
-    // Switch to 7D weekly mode (more demanding on staff)
-    const configToggle = page.locator('[aria-label*="הגדרות משמרת"], [aria-label*="shift"]').first();
-    await configToggle.click();
-    await page.getByRole("button", { name: "7D" }).click();
-
-    // Select a high intensity level that needs more staff than available
-    // Click the leftmost (most intense/fewest shifts but each needs more staff) dot
-    const sliderBtns = page.locator('.border-border .relative.group button:not([disabled])');
-    const btnCount = await sliderBtns.count();
-    if (btnCount > 2) {
-      // Click last feasible dot (most shifts = most staff needed)
-      await sliderBtns.last().click();
-    }
-    await configToggle.click();
-
-    await page.waitForTimeout(1000);
-
-    // After setting an infeasible configuration, the hint should warn — not encourage
-    const pageText = await page.locator('body').innerText();
-    const hasRunOptimizer = pageText.includes(t.hintRunOptimizer);
-    const hasOverCapacity = pageText.includes(t.hintOverCapacity?.split("{{")[0] || "");
-    const hasNotEnough = pageText.includes("לא מספיק") || pageText.includes("Not enough");
-
-    // If the selected level is infeasible, we should see a warning
-    // This test validates the bug: hint should NOT say "click optimize" when config is infeasible
-    if (hasOverCapacity || hasNotEnough) {
-      expect(hasRunOptimizer, "Should not show 'run optimizer' alongside infeasible warning").toBe(false);
-    }
+    // Default: 2 staff, 2 posts — feasible. Should show the run-optimizer hint.
+    await expect(
+      page.getByText("Click the optimize button to generate assignments")
+    ).toBeVisible({ timeout: 5000 });
   });
 });

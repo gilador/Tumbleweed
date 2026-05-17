@@ -12,6 +12,7 @@ import { RosterSwitcher } from "../RosterSwitcher";
 import { DayTabStrip } from "../DayTabStrip";
 import { getDaySlice, getDisplayTime } from "../../service/weeklyScheduleUtils";
 import { getTodayISO } from "../../service/dayLabelUtils";
+import { formatTimeRange } from "../../lib/formatTimeRange";
 import { WeeklyRosterGrid } from "../WeeklyRosterGrid";
 import {
   Dialog,
@@ -59,7 +60,8 @@ export function AssignmentsTab({
   onClearAll,
   showInfo,
 }: AssignmentsTabProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const dir: "ltr" | "rtl" = i18n.language === "he" ? "rtl" : "ltr";
   const shiftStateValue = useRecoilValue(shiftState);
   const activeRoster = getActiveRosterFromState(shiftStateValue);
   const scheduleMode = activeRoster.scheduleMode;
@@ -104,15 +106,15 @@ export function AssignmentsTab({
     post.some((userId) => userId !== null)
   );
 
-  const formatTimeRange = (hourIndex: number): string => {
+  const buildTimeRangeLabel = (hourIndex: number): string => {
     const rawStart = hours[hourIndex]?.value || "";
     const start = isWeekly ? getDisplayTime(rawStart) : rawStart;
     if (hourIndex + 1 < hours.length) {
       const rawEnd = hours[hourIndex + 1].value;
       const end = isWeekly ? getDisplayTime(rawEnd) : rawEnd;
-      return `${start} → ${end}`;
+      return formatTimeRange(start, end, dir);
     }
-    return `${start} → ${endTime}`;
+    return formatTimeRange(start, endTime, dir);
   };
 
   const getUserName = (userId: string | null, postIndex: number, hourIndex: number): string => {
@@ -204,7 +206,7 @@ export function AssignmentsTab({
             <button
               onClick={() => setGroupBy("time")}
               className={`flex items-center gap-1 px-3 py-1.5 text-xs min-h-[36px] ${
-                groupBy === "time" ? "bg-primary text-primary-foreground" : "hover:bg-accent"
+                groupBy === "time" ? "bg-zinc-700 text-white" : "hover:bg-accent"
               }`}
             >
               <IconClock size={14} />
@@ -213,7 +215,7 @@ export function AssignmentsTab({
             <button
               onClick={() => setGroupBy("post")}
               className={`flex items-center gap-1 px-3 py-1.5 text-xs min-h-[36px] ${
-                groupBy === "post" ? "bg-primary text-primary-foreground" : "hover:bg-accent"
+                groupBy === "post" ? "bg-zinc-700 text-white" : "hover:bg-accent"
               }`}
             >
               <IconMapPin size={14} />
@@ -262,7 +264,7 @@ export function AssignmentsTab({
             return (
               <TimeCard
                 key={hour.id}
-                timeRange={formatTimeRange(hourIndex)}
+                timeRange={buildTimeRangeLabel(hourIndex)}
                 isCurrent={isCurrent}
                 defaultExpanded={defaultExpanded}
                 posts={posts}
@@ -313,7 +315,7 @@ export function AssignmentsTab({
           postIndex={reassignTarget.postIndex}
           hourIndex={reassignTarget.hourIndex}
           postName={posts[reassignTarget.postIndex]?.value || ""}
-          timeRange={formatTimeRange(reassignTarget.hourIndex)}
+          timeRange={buildTimeRangeLabel(reassignTarget.hourIndex)}
           currentUserId={assignments[reassignTarget.postIndex]?.[reassignTarget.hourIndex]}
           userShiftData={userShiftData}
           onAssign={(userId) => {
@@ -381,7 +383,7 @@ function TimeCard({
         className="flex items-center justify-between w-full px-4 py-3 min-h-[48px] bg-muted/30"
       >
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium" dir="ltr">{timeRange}</span>
+          <span className="text-sm font-medium">{timeRange}</span>
           {isCurrent && (
             <span className="text-[10px] font-bold bg-primary text-primary-foreground px-2 py-0.5 rounded-full">
               {t("now")}
@@ -430,18 +432,19 @@ function PostCard({
   onTapAssignment: (hourIndex: number) => void;
   isWeekly?: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const dir: "ltr" | "rtl" = i18n.language === "he" ? "rtl" : "ltr";
   const [expanded, setExpanded] = useState(true);
 
-  const formatTimeRange = (hourIndex: number): string => {
+  const buildTimeRangeLabel = (hourIndex: number): string => {
     const rawStart = hours[hourIndex]?.value || "";
     const start = isWeekly ? getDisplayTime(rawStart) : rawStart;
     if (hourIndex + 1 < hours.length) {
       const rawEnd = hours[hourIndex + 1].value;
       const end = isWeekly ? getDisplayTime(rawEnd) : rawEnd;
-      return `${start} → ${end}`;
+      return formatTimeRange(start, end, dir);
     }
-    return `${start} → ${endTime}`;
+    return formatTimeRange(start, endTime, dir);
   };
 
   return (
@@ -467,7 +470,7 @@ function PostCard({
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground" dir="ltr">{formatTimeRange(hourIndex)}</span>
+                  <span className="text-xs text-muted-foreground">{buildTimeRangeLabel(hourIndex)}</span>
                   {isCurrent && (
                     <span className="text-[10px] font-bold bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full">
                       {t("now")}

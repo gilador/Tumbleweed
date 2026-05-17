@@ -1,11 +1,19 @@
 {
   "tumbleweed": "Tumbleweed",
+  "contextMenu": {
+    "select": "Select",
+    "assignWorker": "Assign worker",
+    "rename": "Rename",
+    "delete": "Delete",
+    "copyName": "Copy name"
+  },
 
   "shiftManager": "Shift Manager",
   "roster": "roster",
   "addRoster": "Add roster",
   "defaultPost": "Post {{n}}",
   "defaultMember": "Member {{n}}",
+  "editUserName": "Edit name",
 
   "post": "Post",
   "posts": "Posts",
@@ -22,6 +30,14 @@
   "intense": "Few",
   "relaxed": "Many",
   "intensity": "Intensity",
+  "intensityFew": "Few",
+  "intensityMany": "Many",
+  "intensityConfirmTitle": "Change shift count",
+  "intensityConfirmBody": "This will change to {{count}} shifts and clear the existing assignments",
+  "intensityConfirmAccept": "Change shifts",
+  "intensityConfirmCancel": "Keep current",
+  "intensityChanged": "Changed to {{count}} shifts",
+  "undo": "Undo",
 
   "allAvailable": "All Available",
   "allUnavailable": "All Unavailable",
@@ -90,12 +106,21 @@
   "cannotMakeUnavailable": "Cannot make this user unavailable - at least one user must be available for each time slot to allow optimization.",
   "availabilityResetToAllAvailable": "Availability reset to all available",
   "availabilitySetToAllUnavailable": "Availability set to all unavailable",
+  "availabilityUpdated": "Availability updated",
+  "heatmapToggle": "Heatmap",
+  "actionsToggle": "Actions",
+  "weekdaysOnly": "Weekdays only",
+  "weekendsOnly": "Weekends only",
+  "legendFull": "All available",
+  "legendPartial": "Some available",
+  "legendEmpty": "None available",
   "toggleHourColumnAvailability": "Toggle entire hour column availability",
   "togglePostAvailability": "Toggle entire post availability",
 
   "addPost": "Add Post",
   "deleteSelectedPosts": "Delete selected posts",
   "selectAllPosts": "Select all posts",
+  "deselectAllPosts": "Deselect all posts",
   "hideShiftAdjustment": "Hide shift configuration",
   "showShiftAdjustment": "Show shift configuration",
   "deletePostsConfirm": "Are you sure you want to delete {{count}} post(s)?",
@@ -104,14 +129,19 @@
   "addUser": "Add user",
   "deleteSelectedUsers": "Delete selected users",
   "selectAllUsers": "Select all users",
+  "deselectAllUsers": "Deselect all users",
+  "nSelected": "{{count}} selected",
+  "cancelSelection": "Cancel selection",
   "resetAllUserAvailability": "Reset all user availability",
   "resetAllUserAvailabilityToAvailable": "Reset all user availability to available",
   "deleteStaffConfirm": "Are you sure you want to delete {{count}} staff member(s)?",
   "resetAllAvailabilityTitle": "Reset All Availability",
-  "resetAllAvailabilityDescription": "Are you sure you want to reset all users' availability to \"available\" for all time slots? This will clear any custom availability settings you may have configured.",
+  "resetAllAvailabilityDescription": "Reset availability to \"available\" for all time slots for the selected staff? This will clear any custom availability settings you may have configured",
 
   "noWorkersAddedYet": "No workers added yet",
   "clickToAddWorker": "Click the + button to add a new worker",
+  "scrollStaffListToTop": "Scroll staff list to top",
+  "scrollStaffListToBottom": "Scroll staff list to bottom",
 
   "clearAssignments": "Clear",
   "clearAllAssignmentsTitle": "Clear All Assignments?",
@@ -218,6 +248,7 @@
   "problematicTimeSlots": "Problematic time slots where no users are available",
   "fixAvailabilityHint": "To fix this, please ensure at least one user is available for each of these time slots in the Availability tab.",
   "optimizationSuccess": "Shift assignments have been optimized successfully",
+  "optimizationSuccessWithDuration": "Shift assignments have been optimized successfully {{duration}}",
   "optimizationError": "An unexpected error occurred during optimization. Please try again.",
 
   "preset9to5": "9-to-5",
@@ -235,7 +266,6 @@
   "copyToWeekdays": "Copy to weekdays",
   "copyToWeekend": "Copy to weekend",
   "shiftsPerDay": "{{count}} shifts/day",
-  "howItWorksDetail7d": "{{opHours}}h operation ({{start}}\u2013{{end}}) with {{rest}}h min rest \u00f7 {{posts}} posts \u00d7 {{staff}} staff \u00d7 7 days = {{shifts}} shifts/day of {{duration}}h each",
 
   "lastSync": "Last sync",
   "currentState": "Current",
@@ -249,6 +279,7 @@
   "driveConflictUseDrive": "Use Drive data",
   "driveConflictKeepLocal": "Keep local data",
   "syncNow": "Sync now",
+  "syncStatus": "Sync status",
   "noFeasibleSchedule": "Not enough staff to cover all posts — add more staff or reduce posts",
   "overCapacity": "Needed exceeds capacity — add more staff or reduce posts/hours",
   "hintAddStaff": "Add staff members to get started",
@@ -276,5 +307,26 @@
   "drivePromptPrivacy": "All data is stored in your private Google Drive and requires Drive permissions",
 
   "dailyView": "Daily",
-  "weeklyView": "Weekly"
+  "weeklyView": "Weekly",
+
+  "schedule": "Schedule",
+  "addPosition": "Add position",
+  "addUserShort": "Add",
+  "positionsCount": "{{count}} positions",
+  "shiftsPerDayShort": "{{count}} shifts/day",
+  "shiftDurationShort": "{{duration}}h",
+  "availabilityCountHeader": "Availability — {{count}} of {{total}}",
+  "pickTeammate": "Pick a teammate",
+  "pickTeammateDescription": "Click someone in the list to view their assignments",
+  "deletePostConfirmSingle": "Delete this position?",
+  "deleteUserConfirmSingle": "Delete this teammate?",
+  "selectAll": "Select all",
+  "deleteCount": "Delete {{count}}",
+  "clickToAssign": "click to assign",
+  "groupBy": {
+    "time": "Time",
+    "position": "Position",
+    "timeAria": "Group by time",
+    "positionAria": "Group by position"
+  }
 }

@@ -1,57 +1,68 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, devices, Page } from "@playwright/test";
+import { installInitScript, waitForMobileApp } from "./helpers";
 
-// Helper: set up staff and posts so optimization can run
-async function setupForOptimization(page: import("@playwright/test").Page) {
-  await page.goto("/tumbleweed/");
-  await expect(page.getByText("Tumbleweed")).toBeVisible({ timeout: 10000 });
+test.use({ ...devices["Pixel 7"] });
 
-  // Ensure posts exist (settings tab is default)
-  await expect(page.getByText("Posts")).toBeVisible();
+// AssignmentsTab.tsx layout reference:
+//   - Empty state: <h1>Assignments</h1>, "No assignments yet" + hint copy.
+//   - FAB: button.fixed.rounded-full (FloatingActionButton).
+//   - Header has trash button with title="Clear All Assignments?".
+//   - Group toggle: two <button>s with text "Time" and "Post".
+//   - Clear dialog: DialogTitle "Clear All Assignments?", buttons "Clear" /
+//     "Cancel".
 
-  // Go to staff tab and add soldiers (need at least as many as posts)
-  await page.getByText("Staff").click();
-  await expect(page.getByRole("heading", { name: "Staff" })).toBeVisible();
+async function gotoAssignments(page: Page) {
+  await waitForMobileApp(page);
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Assignments" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: /^Assignments$/ })
+  ).toBeVisible();
+}
 
-  // Add 3 soldiers to ensure enough for optimization
+async function setupForOptimization(page: Page) {
+  await waitForMobileApp(page);
+
+  // Navigate to staff and add 3 staff via FAB.
+  await page.getByRole("navigation").getByRole("button", { name: "Staff" }).click();
+  await expect(page.getByRole("heading", { name: /^Staff$/ })).toBeVisible();
+
   const addFab = page.locator("button.fixed").filter({ has: page.locator("svg") });
   for (let i = 0; i < 3; i++) {
     await addFab.click();
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(150);
   }
 
-  // Navigate to assignments
-  await page.getByText("Assignments").click();
+  // Navigate to assignments.
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Assignments" })
+    .click();
   await expect(
-    page.getByRole("heading", { name: "Assignments" })
+    page.getByRole("heading", { name: /^Assignments$/ })
   ).toBeVisible();
 
-  // Wait briefly for the optimize button state to settle
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(300);
 }
 
-async function runOptimization(page: import("@playwright/test").Page) {
+async function runOptimization(page: Page) {
   const fab = page.locator("button.fixed.rounded-full");
   await expect(fab).toBeVisible();
-
-  // Click the FAB
   await fab.click();
-
-  // Wait for the spinner to appear (indicates optimization started)
-  // Then wait for assignments to show up
   await expect(page.getByText("No assignments yet")).not.toBeVisible({
     timeout: 30000,
   });
 }
 
 test.describe("Mobile Assignments Tab", () => {
-  test("shows empty state when no assignments", async ({ page }) => {
-    await page.goto("/tumbleweed/");
-    await expect(page.getByText("Tumbleweed")).toBeVisible({ timeout: 10000 });
-    await page.getByText("Assignments").click();
-    await expect(
-      page.getByRole("heading", { name: "Assignments" })
-    ).toBeVisible();
+  test.beforeEach(async ({ page }) => {
+    await installInitScript(page);
+  });
 
+  test("shows empty state when no assignments", async ({ page }) => {
+    await gotoAssignments(page);
     await expect(page.getByText("No assignments yet")).toBeVisible();
     await expect(
       page.getByText("Tap the optimize button to generate assignments")
@@ -59,13 +70,7 @@ test.describe("Mobile Assignments Tab", () => {
   });
 
   test("shows optimize FAB button", async ({ page }) => {
-    await page.goto("/tumbleweed/");
-    await expect(page.getByText("Tumbleweed")).toBeVisible({ timeout: 10000 });
-    await page.getByText("Assignments").click();
-    await expect(
-      page.getByRole("heading", { name: "Assignments" })
-    ).toBeVisible();
-
+    await gotoAssignments(page);
     const fab = page.locator("button.fixed.rounded-full");
     await expect(fab).toBeVisible();
   });
@@ -74,11 +79,9 @@ test.describe("Mobile Assignments Tab", () => {
     await setupForOptimization(page);
     await runOptimization(page);
 
-    // Should see grouping toggle buttons
-    await expect(page.getByText("Time")).toBeVisible();
-    await expect(page.getByText("Post")).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Time$/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Post$/ })).toBeVisible();
 
-    // Should see time range cards
     await expect(
       page.getByText(/\d{2}:\d{2}\s*→\s*\d{2}:\d{2}/).first()
     ).toBeVisible();
@@ -88,18 +91,11 @@ test.describe("Mobile Assignments Tab", () => {
     await setupForOptimization(page);
     await runOptimization(page);
 
-    // Default is "time" grouping — switch to "post"
-    await page.getByText("Post").click();
-
-    // Should see post names as section headers
+    await page.getByRole("button", { name: /^Post$/ }).click();
     const postCards = page.locator("span.font-semibold");
-    const count = await postCards.count();
-    expect(count).toBeGreaterThan(0);
+    expect(await postCards.count()).toBeGreaterThan(0);
 
-    // Switch back to "time"
-    await page.getByText("Time").click();
-
-    // Should see time range headers
+    await page.getByRole("button", { name: /^Time$/ }).click();
     await expect(
       page.getByText(/\d{2}:\d{2}\s*→\s*\d{2}:\d{2}/).first()
     ).toBeVisible();
@@ -109,16 +105,16 @@ test.describe("Mobile Assignments Tab", () => {
     await setupForOptimization(page);
     await runOptimization(page);
 
-    // Click the trash icon to clear
-    await page.locator('button[title="Clear all assignments"]').click();
+    await page.locator('button[title="Clear All Assignments?"]').click();
 
-    // Confirmation dialog should appear
-    await expect(page.getByText("Clear All Assignments?")).toBeVisible();
+    const dialog = page.locator('[role="dialog"]');
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByText(/^Clear All Assignments\?$/)
+    ).toBeVisible();
 
-    // Click Clear button
-    await page.getByRole("button", { name: "Clear" }).click();
+    await dialog.getByRole("button", { name: /^Clear$/ }).click();
 
-    // Should be back to empty state
     await expect(page.getByText("No assignments yet")).toBeVisible();
   });
 
@@ -126,16 +122,16 @@ test.describe("Mobile Assignments Tab", () => {
     await setupForOptimization(page);
     await runOptimization(page);
 
-    // Click the trash icon
-    await page.locator('button[title="Clear all assignments"]').click();
+    await page.locator('button[title="Clear All Assignments?"]').click();
 
-    // Dialog should appear
-    await expect(page.getByText("Clear All Assignments?")).toBeVisible();
+    const dialog = page.locator('[role="dialog"]');
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByText(/^Clear All Assignments\?$/)
+    ).toBeVisible();
 
-    // Click Cancel
-    await page.getByRole("button", { name: "Cancel" }).click();
+    await dialog.getByRole("button", { name: /^Cancel$/ }).click();
 
-    // Assignments should still be visible
     await expect(page.getByText("No assignments yet")).not.toBeVisible();
   });
 
@@ -143,15 +139,11 @@ test.describe("Mobile Assignments Tab", () => {
     await setupForOptimization(page);
     await runOptimization(page);
 
-    // Find the first time card
     const firstCard = page.locator(".rounded-lg.border").first();
     const headerButton = firstCard.locator("button").first();
     await expect(headerButton).toBeVisible();
 
-    // Check if expanded
     const wasExpanded = (await firstCard.locator(".divide-y").count()) > 0;
-
-    // Click to toggle
     await headerButton.click();
 
     if (wasExpanded) {

@@ -226,6 +226,8 @@ function DesktopSyncIcon({ size, sync, animating }: {
   const { isAuthenticated } = useAuth();
   const triggerSync = useContext(TriggerSyncContext);
   const showDrivePrompt = useContext(ShowDrivePromptContext);
+  const recoil = useRecoilValue(shiftState);
+  const isOptimized = !!recoil.optimizationSignature;
 
   return (
     <Tooltip>
@@ -234,11 +236,15 @@ function DesktopSyncIcon({ size, sync, animating }: {
           onClick={() => (isGoogleAuthAvailable && (!isAuthenticated || sync === "drive-error")) ? showDrivePrompt?.() : triggerSync?.()}
           className="cursor-pointer"
           disabled={animating}
+          aria-label={t("syncStatus")}
         >
           <SyncCircleIcon size={size} sync={sync} animating={animating} />
         </button>
       </TooltipTrigger>
       <TooltipContent>
+        {isOptimized && (
+          <p className="text-xs font-medium mb-1">{t("hintOptimized")}</p>
+        )}
         <SyncTimestamps />
         {isGoogleAuthAvailable && (!isAuthenticated || sync === "drive-error") && (
           <p className="text-xs text-primary mt-1">{t("drivePromptConnect")}</p>
@@ -257,6 +263,8 @@ function MobileSyncPopover({ size, sync, animating }: {
   const { isAuthenticated } = useAuth();
   const triggerSync = useContext(TriggerSyncContext);
   const showDrivePrompt = useContext(ShowDrivePromptContext);
+  const recoil = useRecoilValue(shiftState);
+  const isOptimized = !!recoil.optimizationSignature;
   const [open, setOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -286,6 +294,9 @@ function MobileSyncPopover({ size, sync, animating }: {
       </button>
       {open && (
         <div className="absolute end-0 top-full mt-1 z-50 rounded-md border bg-popover px-3 py-2 text-popover-foreground shadow-md whitespace-nowrap space-y-2">
+          {isOptimized && (
+            <p className="text-xs font-medium">{t("hintOptimized")}</p>
+          )}
           <SyncTimestamps />
           <div className="flex items-center gap-2 text-xs font-medium">
             {(isAuthenticated || !isGoogleAuthAvailable) ? (

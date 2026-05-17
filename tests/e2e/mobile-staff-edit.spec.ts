@@ -1,123 +1,86 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, devices, Page } from "@playwright/test";
+import { installInitScript, waitForMobileApp } from "./helpers";
+
+test.use({ ...devices["Pixel 7"] });
+
+// Group C — Mobile staff name editing. Rename is a STAFF LIST affordance,
+// not part of the drill-down (architect plan: list-level pencil per row).
+// StaffTab.tsx renders an `[data-testid="edit-staff-${userId}"]` pencil
+// button per row; tapping it opens an inline input
+// `[data-testid="edit-staff-name-input"]` with current name pre-filled.
+
+const navigateToStaff = async (page: Page) => {
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Staff" })
+    .click();
+  await expect(page.getByRole("heading", { name: /^Staff$/ })).toBeVisible();
+};
 
 test.describe("Mobile Staff Name Editing", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto("/tumbleweed/");
-    await expect(page.locator("text=Tumbleweed").first()).toBeVisible({
-      timeout: 10000,
-    });
-
-    // Navigate to staff tab
-    await page.locator("text=Staff").last().click();
-    await page.waitForTimeout(500);
+    await installInitScript(page);
+    await waitForMobileApp(page);
+    await navigateToStaff(page);
   });
 
-  test("shows pencil edit icon next to each staff member", async ({
-    page,
-  }) => {
-    // Add a staff member if needed
-    const addButton = page.locator("button").filter({ has: page.locator("svg.tabler-icon-plus") }).last();
-    await addButton.click();
-    await page.waitForTimeout(300);
-
-    // Should see a pencil icon (edit button)
-    const pencilButtons = page.locator("svg.tabler-icon-pencil");
-    await expect(pencilButtons.first()).toBeVisible();
+  test("shows pencil edit icon next to each staff member", async ({ page }) => {
+    const pencils = page.locator('[data-testid^="edit-staff-"]');
+    const rows = page.locator(".rounded-lg.border");
+    const rowCount = await rows.count();
+    expect(rowCount).toBeGreaterThan(0);
+    expect(await pencils.count()).toBe(rowCount);
   });
 
   test("clicking pencil opens inline edit with current name", async ({
     page,
   }) => {
-    // Add a staff member
-    const addButton = page.locator("button").filter({ has: page.locator("svg.tabler-icon-plus") }).last();
-    await addButton.click();
-    await page.waitForTimeout(300);
+    const firstRow = page.locator(".rounded-lg.border").first();
+    const originalName = (
+      await firstRow.locator("button.flex-1 span").first().textContent()
+    )?.trim();
+    expect(originalName).toBeTruthy();
 
-    // Click pencil icon on first staff member
-    const pencilButton = page.locator("svg.tabler-icon-pencil").first().locator("..");
-    await pencilButton.click();
-
-    // Input field should appear with the current name
-    const input = page.getByTestId("edit-staff-name-input");
+    await firstRow.locator('[data-testid^="edit-staff-"]').click();
+    const input = page.locator('[data-testid="edit-staff-name-input"]');
     await expect(input).toBeVisible();
-    await expect(input).not.toHaveValue("");
+    await expect(input).toHaveValue(originalName!);
   });
 
   test("can edit staff name and save with check button", async ({ page }) => {
-    // Add a staff member
-    const addButton = page.locator("button").filter({ has: page.locator("svg.tabler-icon-plus") }).last();
-    await addButton.click();
-    await page.waitForTimeout(300);
-
-    // Get original name
-    const staffName = page.locator(".text-sm.font-medium").first();
-    const originalName = await staffName.textContent();
-
-    // Click pencil to edit
-    const pencilButton = page.locator("svg.tabler-icon-pencil").first().locator("..");
-    await pencilButton.click();
-
-    // Clear and type new name
-    const input = page.getByTestId("edit-staff-name-input");
-    await input.clear();
-    await input.fill("שם חדש");
-
-    // Click check button to save
-    const checkButton = page.locator("svg.tabler-icon-check").first().locator("..");
-    await checkButton.click();
-
-    // Input should disappear
-    await expect(input).not.toBeVisible();
-
-    // Name should be updated
-    await expect(page.locator("text=שם חדש")).toBeVisible();
+    const firstRow = page.locator(".rounded-lg.border").first();
+    await firstRow.locator('[data-testid^="edit-staff-"]').click();
+    const input = page.locator('[data-testid="edit-staff-name-input"]');
+    await input.fill("RenamedAlpha");
+    // Save button is the first non-input button next to the input (check icon).
+    await firstRow.locator("button").first().click();
+    await expect(input).toHaveCount(0);
+    await expect(firstRow.getByText("RenamedAlpha")).toBeVisible();
   });
 
   test("pressing Escape cancels edit without saving", async ({ page }) => {
-    // Add a staff member
-    const addButton = page.locator("button").filter({ has: page.locator("svg.tabler-icon-plus") }).last();
-    await addButton.click();
-    await page.waitForTimeout(300);
+    const firstRow = page.locator(".rounded-lg.border").first();
+    const originalName = (
+      await firstRow.locator("button.flex-1 span").first().textContent()
+    )?.trim();
+    expect(originalName).toBeTruthy();
 
-    // Get original name
-    const staffName = page.locator(".text-sm.font-medium").first();
-    const originalName = await staffName.textContent();
-
-    // Click pencil to edit
-    const pencilButton = page.locator("svg.tabler-icon-pencil").first().locator("..");
-    await pencilButton.click();
-
-    // Type something different
-    const input = page.getByTestId("edit-staff-name-input");
-    await input.clear();
-    await input.fill("שם שונה לגמרי");
-
-    // Press Escape to cancel
+    await firstRow.locator('[data-testid^="edit-staff-"]').click();
+    const input = page.locator('[data-testid="edit-staff-name-input"]');
+    await input.fill("ShouldNotPersist");
     await input.press("Escape");
-
-    // Input should disappear, original name should remain
-    await expect(input).not.toBeVisible();
-    await expect(page.locator(`text=${originalName}`).first()).toBeVisible();
+    await expect(input).toHaveCount(0);
+    await expect(firstRow.getByText(originalName!)).toBeVisible();
+    await expect(firstRow.getByText("ShouldNotPersist")).toHaveCount(0);
   });
 
   test("pressing Enter saves the edit", async ({ page }) => {
-    // Add a staff member
-    const addButton = page.locator("button").filter({ has: page.locator("svg.tabler-icon-plus") }).last();
-    await addButton.click();
-    await page.waitForTimeout(300);
-
-    // Click pencil to edit
-    const pencilButton = page.locator("svg.tabler-icon-pencil").first().locator("..");
-    await pencilButton.click();
-
-    // Clear and type new name, then press Enter
-    const input = page.getByTestId("edit-staff-name-input");
-    await input.clear();
-    await input.fill("עובד מעודכן");
+    const firstRow = page.locator(".rounded-lg.border").first();
+    await firstRow.locator('[data-testid^="edit-staff-"]').click();
+    const input = page.locator('[data-testid="edit-staff-name-input"]');
+    await input.fill("EnterSaved");
     await input.press("Enter");
-
-    // Input should disappear, new name should appear
-    await expect(input).not.toBeVisible();
-    await expect(page.locator("text=עובד מעודכן")).toBeVisible();
+    await expect(input).toHaveCount(0);
+    await expect(firstRow.getByText("EnterSaved")).toBeVisible();
   });
 });

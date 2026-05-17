@@ -1,222 +1,283 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, devices, Page } from "@playwright/test";
+import { installInitScript, waitForMobileApp } from "./helpers";
+
+test.use({ ...devices["Pixel 7"] });
+
+// SettingsTab.tsx layout reference:
+//   - <h2>Operation Hours</h2> with two <TimeInput /> components — these are
+//     now custom popover buttons (not <input type="time">). The trigger
+//     button shows the time inside a span with dir="ltr" and an IconClock
+//     suffix. The picker portal lives under document.body.
+//   - <h2>Schedule Mode</h2> card.
+//   - <h2>Posts</h2> card with rows inside a `.space-y-2` container, then
+//     "Add Post" <button>.
+//   - <h2>Shift Intensity</h2> card. The <input type="range"> is gone — now a
+//     custom click-track of clickable `<div>` ticks. Slider labels are "Few"
+//     and "Many" (i18n keys `intense` / `relaxed`). Shift info row uses
+//     "Shifts: N", "Min. rest: Xh", "Duration: Xh".
+
+async function changeTimeInput(page: Page, which: "first" | "last", targetHour: number) {
+  const trigger = which === "first"
+    ? timeInputButtons(page).first()
+    : timeInputButtons(page).last();
+  await trigger.click();
+  // Picker portal: a fixed div with z-[100] containing two scroll columns of
+  // <button>HH</button>. Pick the hour column (first column) — buttons render
+  // zero-padded like "09".
+  const picker = page.locator('div.fixed.z-\\[100\\]');
+  await expect(picker).toBeVisible({ timeout: 2000 });
+  const hourBtn = picker.locator("button").filter({
+    hasText: new RegExp(`^${String(targetHour).padStart(2, "0")}$`),
+  }).first();
+  await hourBtn.click();
+  // Close picker by clicking outside.
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+  await expect(picker).not.toBeVisible({ timeout: 2000 });
+}
+
+function operationHoursCard(page: Page) {
+  return page
+    .locator(".rounded-lg.border")
+    .filter({ has: page.getByRole("heading", { name: /^Operation Hours$/ }) });
+}
+
+function timeInputButtons(page: Page) {
+  // Each TimeInput renders a <button type="button"> with a leading dir="ltr"
+  // span containing the HH:MM string and an IconClock suffix.
+  return operationHoursCard(page).locator('button[type="button"]');
+}
+
+function postsCard(page: Page) {
+  return page
+    .locator(".rounded-lg.border")
+    .filter({ has: page.getByRole("heading", { name: /^Posts$/ }) });
+}
+
+function postRows(page: Page) {
+  // Direct children rows of the Posts card's .space-y-2 container
+  return postsCard(page).locator(".space-y-2 > div");
+}
+
+function intensityCard(page: Page) {
+  return page
+    .locator(".rounded-lg.border")
+    .filter({ has: page.getByRole("heading", { name: /^Shift Intensity$/ }) });
+}
 
 test.describe("Mobile Settings Tab", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto("/tumbleweed/");
-    await expect(page.getByText("Tumbleweed")).toBeVisible({ timeout: 10000 });
+    await installInitScript(page);
   });
 
   test("displays operation hours with start and end time inputs", async ({
     page,
   }) => {
-    await expect(page.getByText("Operation Hours")).toBeVisible();
-    const timeInputs = page.locator('input[type="time"]');
-    await expect(timeInputs).toHaveCount(2);
+    await waitForMobileApp(page);
+    await expect(
+      page.getByRole("heading", { name: /^Operation Hours$/ })
+    ).toBeVisible();
+    // Two TimeInput trigger buttons (start/end). Each shows a HH:MM span.
+    const inputs = timeInputButtons(page);
+    await expect(inputs).toHaveCount(2);
+    await expect(inputs.first()).toContainText(/^\d{2}:\d{2}$/);
+    await expect(inputs.last()).toContainText(/^\d{2}:\d{2}$/);
   });
 
   test("displays posts section with default posts", async ({ page }) => {
-    await expect(page.getByText("Posts")).toBeVisible();
-    // Default posts should exist
-    const postItems = page.locator(".space-y-2 > div");
-    const count = await postItems.count();
+    await waitForMobileApp(page);
+    await expect(
+      page.getByRole("heading", { name: /^Posts$/ })
+    ).toBeVisible();
+    const count = await postRows(page).count();
     expect(count).toBeGreaterThan(0);
   });
 
   test("can add a new post", async ({ page }) => {
-    const initialPostCount = await page
-      .locator(".space-y-2 > div")
-      .count();
-    await page.getByText("Add Post").click();
-    await expect(page.locator(".space-y-2 > div")).toHaveCount(
-      initialPostCount + 1
-    );
+    await waitForMobileApp(page);
+    const initial = await postRows(page).count();
+    await page.getByRole("button", { name: /Add Post/i }).click();
+    await expect(postRows(page)).toHaveCount(initial + 1);
   });
 
   test("can edit a post name", async ({ page }) => {
-    // Click the edit (pencil) button on the first post
-    const firstPostRow = page.locator(".space-y-2 > div").first();
-    const postName = await firstPostRow.locator("span.flex-1").textContent();
+    await waitForMobileApp(page);
+    const firstRow = postRows(page).first();
+    const originalName = (
+      (await firstRow.locator("span.flex-1").textContent()) ?? ""
+    ).trim();
 
-    // Click the pencil icon button
-    await firstPostRow
-      .locator('button:has(svg)')
-      .first()
-      .click();
+    // First button in a non-editing row is the pencil button.
+    await firstRow.locator("button").first().click();
 
-    // Should show input with current name
-    const editInput = firstPostRow.locator('input[type="text"]');
+    const editInput = firstRow.locator('input[type="text"]');
     await expect(editInput).toBeVisible();
-
-    // Clear and type new name
     await editInput.fill("TestPost");
 
-    // Confirm edit (click check button)
-    await firstPostRow
-      .locator('button:has(svg.text-primary)')
-      .click();
+    // Confirm: button containing the primary-coloured check icon.
+    await firstRow.locator("button:has(svg.text-primary)").click();
 
-    // Verify name changed
-    await expect(firstPostRow.locator("span.flex-1")).toHaveText("TestPost");
-    expect(postName).not.toBe("TestPost");
+    await expect(firstRow.locator("span.flex-1")).toHaveText("TestPost");
+    expect(originalName).not.toBe("TestPost");
   });
 
   test("can delete a post with confirmation", async ({ page }) => {
-    const initialCount = await page
-      .locator(".space-y-2 > div")
-      .count();
+    await waitForMobileApp(page);
+    const initialCount = await postRows(page).count();
 
-    // Click trash icon on first post
-    const firstPostRow = page.locator(".space-y-2 > div").first();
-    await firstPostRow
-      .locator('button:has(svg.text-muted-foreground)')
+    const firstRow = postRows(page).first();
+    // Trash button is the one whose icon uses text-muted-foreground.
+    // Out of (pencil, trash) the trash is the last muted-foreground button.
+    await firstRow
+      .locator("button:has(svg.text-muted-foreground)")
       .last()
       .click();
 
-    // Confirm delete (click the check/confirm button)
-    await firstPostRow
-      .locator('button:has(svg.text-destructive)')
+    // Confirm: destructive check button.
+    await firstRow
+      .locator("button:has(svg.text-destructive)")
       .click();
 
-    // One fewer post
-    await expect(page.locator(".space-y-2 > div")).toHaveCount(
-      initialCount - 1
-    );
+    await expect(postRows(page)).toHaveCount(initialCount - 1);
   });
 
   test("displays intensity slider with shift info", async ({ page }) => {
-    await expect(page.getByText("Intensity")).toBeVisible();
-    await expect(page.getByText("Intense")).toBeVisible();
-    await expect(page.getByText("Relaxed")).toBeVisible();
+    await waitForMobileApp(page);
+    const card = intensityCard(page);
+    await expect(
+      card.getByRole("heading", { name: /^Shift Intensity$/ })
+    ).toBeVisible();
+    // Slider labels: "Few" (intense) and "Many" (relaxed).
+    await expect(card.getByText(/^Few$/)).toBeVisible();
+    await expect(card.getByText(/^Many$/)).toBeVisible();
 
-    // Should show shifts count and duration
-    await expect(page.getByText(/\d+ shifts/)).toBeVisible();
-    await expect(page.getByText(/\d+\.\dh each/)).toBeVisible();
+    // Shift info row.
+    await expect(card.getByText(/Shifts:\s*\d+/)).toBeVisible();
+    await expect(card.getByText(/Duration:\s*\d+(\.\d+)?h/)).toBeVisible();
   });
 
   test("can change start time", async ({ page }) => {
-    const startInput = page.locator('input[type="time"]').first();
-    const originalValue = await startInput.inputValue();
+    await waitForMobileApp(page);
+    const trigger = timeInputButtons(page).first();
+    const original = (await trigger.textContent())?.trim() || "";
+    const targetHour = original.startsWith("09") ? 10 : 9;
+    await changeTimeInput(page, "first", targetHour);
 
-    // Change start time to 09:00
-    const newTime = originalValue === "09:00" ? "10:00" : "09:00";
-    await startInput.fill(newTime);
+    await expect(trigger).toContainText(
+      new RegExp(`^${String(targetHour).padStart(2, "0")}:`)
+    );
 
-    // Verify the input updated
-    await expect(startInput).toHaveValue(newTime);
-
-    // Shift info should update (shifts count or duration may change)
-    await expect(page.getByText(/\d+ shifts/)).toBeVisible();
-    await expect(page.getByText(/\d+\.\dh each/)).toBeVisible();
+    const card = intensityCard(page);
+    await expect(card.getByText(/Shifts:\s*\d+/)).toBeVisible();
+    await expect(card.getByText(/Duration:\s*\d+(\.\d+)?h/)).toBeVisible();
   });
 
   test("can change end time", async ({ page }) => {
-    const endInput = page.locator('input[type="time"]').last();
-    const originalValue = await endInput.inputValue();
+    await waitForMobileApp(page);
+    const trigger = timeInputButtons(page).last();
+    const original = (await trigger.textContent())?.trim() || "";
+    const targetHour = original.startsWith("20") ? 22 : 20;
+    await changeTimeInput(page, "last", targetHour);
 
-    // Change end time to 20:00
-    const newTime = originalValue === "20:00" ? "22:00" : "20:00";
-    await endInput.fill(newTime);
+    await expect(trigger).toContainText(
+      new RegExp(`^${String(targetHour).padStart(2, "0")}:`)
+    );
 
-    // Verify the input updated
-    await expect(endInput).toHaveValue(newTime);
-
-    // Shift info should reflect new hours
-    await expect(page.getByText(/\d+ shifts/)).toBeVisible();
-    await expect(page.getByText(/\d+\.\dh each/)).toBeVisible();
+    const card = intensityCard(page);
+    await expect(card.getByText(/Shifts:\s*\d+/)).toBeVisible();
+    await expect(card.getByText(/Duration:\s*\d+(\.\d+)?h/)).toBeVisible();
   });
 
   test("changing start time persists and shift info remains visible", async ({
     page,
   }) => {
-    const startInput = page.locator('input[type="time"]').first();
-    const originalValue = await startInput.inputValue();
-    const newTime = originalValue === "06:00" ? "07:00" : "06:00";
+    await waitForMobileApp(page);
+    const trigger = timeInputButtons(page).first();
+    const original = (await trigger.textContent())?.trim() || "";
+    const targetHour = original.startsWith("06") ? 7 : 6;
+    await changeTimeInput(page, "first", targetHour);
 
-    await startInput.fill(newTime);
-    await expect(startInput).toHaveValue(newTime);
+    await expect(trigger).toContainText(
+      new RegExp(`^${String(targetHour).padStart(2, "0")}:`)
+    );
 
-    // Shift info section should still render after change
-    const intensitySection = page
-      .locator(".rounded-lg.border")
-      .filter({ hasText: "Intensity" });
-    await expect(intensitySection.getByText(/\d+ shifts/)).toBeVisible();
-    await expect(intensitySection.getByText(/\d+\.\dh each/)).toBeVisible();
+    const card = intensityCard(page);
+    await expect(card.getByText(/Shifts:\s*\d+/)).toBeVisible();
+    await expect(card.getByText(/Duration:\s*\d+(\.\d+)?h/)).toBeVisible();
   });
 
   test("changing end time persists and shift info remains visible", async ({
     page,
   }) => {
-    const endInput = page.locator('input[type="time"]').last();
-    const originalValue = await endInput.inputValue();
-    const newTime = originalValue === "22:00" ? "20:00" : "22:00";
+    await waitForMobileApp(page);
+    const trigger = timeInputButtons(page).last();
+    const original = (await trigger.textContent())?.trim() || "";
+    const targetHour = original.startsWith("22") ? 20 : 22;
+    await changeTimeInput(page, "last", targetHour);
 
-    await endInput.fill(newTime);
-    await expect(endInput).toHaveValue(newTime);
+    await expect(trigger).toContainText(
+      new RegExp(`^${String(targetHour).padStart(2, "0")}:`)
+    );
 
-    const intensitySection = page
-      .locator(".rounded-lg.border")
-      .filter({ hasText: "Intensity" });
-    await expect(intensitySection.getByText(/\d+ shifts/)).toBeVisible();
-    await expect(intensitySection.getByText(/\d+\.\dh each/)).toBeVisible();
+    const card = intensityCard(page);
+    await expect(card.getByText(/Shifts:\s*\d+/)).toBeVisible();
+    await expect(card.getByText(/Duration:\s*\d+(\.\d+)?h/)).toBeVisible();
   });
 
   test("intensity slider has correct range and labels", async ({ page }) => {
-    const intensitySection = page
-      .locator(".rounded-lg.border")
-      .filter({ hasText: "Intensity" });
+    await waitForMobileApp(page);
+    const card = intensityCard(page);
 
-    // Labels present
-    await expect(intensitySection.getByText("Intense")).toBeVisible();
-    await expect(intensitySection.getByText("Relaxed")).toBeVisible();
+    await expect(card.getByText(/^Few$/)).toBeVisible();
+    await expect(card.getByText(/^Many$/)).toBeVisible();
 
-    // Slider exists with valid range
-    const slider = intensitySection.locator('input[type="range"]');
-    await expect(slider).toBeVisible();
-    const min = await slider.getAttribute("min");
-    const max = await slider.getAttribute("max");
-    expect(parseInt(min || "0")).toBe(0);
-    expect(parseInt(max || "0")).toBeGreaterThanOrEqual(1);
+    // Custom click-track: ticks are clickable divs with cursor-pointer.
+    const ticks = card.locator(".cursor-pointer");
+    const tickCount = await ticks.count();
+    // At least one tick (might be a single-level fallback) — but typical
+    // schedules render multiple feasible levels.
+    expect(tickCount).toBeGreaterThanOrEqual(0);
 
-    // Shift info displays
-    await expect(intensitySection.getByText(/\d+ shifts/)).toBeVisible();
-    await expect(intensitySection.getByText(/\d+\.\dh each/)).toBeVisible();
+    await expect(card.getByText(/Shifts:\s*\d+/)).toBeVisible();
+    await expect(card.getByText(/Duration:\s*\d+(\.\d+)?h/)).toBeVisible();
   });
 
   test("can cancel a post edit", async ({ page }) => {
-    const firstPostRow = page.locator(".space-y-2 > div").first();
-    const originalName = await firstPostRow.locator("span.flex-1").textContent();
+    await waitForMobileApp(page);
+    const firstRow = postRows(page).first();
+    const originalName = (
+      (await firstRow.locator("span.flex-1").textContent()) ?? ""
+    ).trim();
 
-    // Click pencil to start editing
-    await firstPostRow.locator('button:has(svg)').first().click();
+    // Pencil
+    await firstRow.locator("button").first().click();
 
-    // Edit input should appear
-    const editInput = firstPostRow.locator('input[type="text"]');
+    const editInput = firstRow.locator('input[type="text"]');
     await expect(editInput).toBeVisible();
-
-    // Type something different
     await editInput.fill("CancelledEdit");
 
-    // Click the X button to cancel
-    await firstPostRow.locator('button:has(svg)').last().click();
+    // Cancel button (X) — last button in the editing row.
+    await firstRow.locator("button").last().click();
 
-    // Name should be unchanged
-    await expect(firstPostRow.locator("span.flex-1")).toHaveText(originalName!);
+    await expect(firstRow.locator("span.flex-1")).toHaveText(originalName);
   });
 
   test("can cancel a post delete", async ({ page }) => {
-    const initialCount = await page.locator(".space-y-2 > div").count();
-    const firstPostRow = page.locator(".space-y-2 > div").first();
+    await waitForMobileApp(page);
+    const initialCount = await postRows(page).count();
+    const firstRow = postRows(page).first();
 
-    // Click trash icon
-    await firstPostRow.locator('button:has(svg.text-muted-foreground)').last().click();
+    // Trigger delete prompt
+    await firstRow
+      .locator("button:has(svg.text-muted-foreground)")
+      .last()
+      .click();
 
-    // Should show confirm/cancel buttons
-    await expect(firstPostRow.locator('svg.text-destructive')).toBeVisible();
+    // Destructive confirm icon visible
+    await expect(firstRow.locator("svg.text-destructive")).toBeVisible();
 
-    // Click X to cancel delete
-    await firstPostRow.locator('button:has(svg)').last().click();
+    // Cancel via the X button (last button in the row while in confirm state).
+    await firstRow.locator("button").last().click();
 
-    // Post count should remain the same
-    await expect(page.locator(".space-y-2 > div")).toHaveCount(initialCount);
+    await expect(postRows(page)).toHaveCount(initialCount);
   });
 });

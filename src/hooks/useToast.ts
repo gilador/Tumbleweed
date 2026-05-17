@@ -6,6 +6,9 @@ export interface Toast {
   type?: "success" | "error" | "info";
   duration?: number;
   highlightText?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  onClose?: () => void;
 }
 
 export function useToast() {
@@ -14,6 +17,7 @@ export function useToast() {
   const addToast = useCallback((toast: Omit<Toast, "id">) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     setToasts((prev) => [...prev, { ...toast, id }]);
+    return id;
   }, []);
 
   const removeToast = useCallback((id: string) => {
@@ -46,6 +50,26 @@ export function useToast() {
     [addToast]
   );
 
+  const showActionable = useCallback(
+    (
+      message: string,
+      actionLabel: string,
+      onAction: () => void,
+      duration = 8000,
+      onClose?: () => void
+    ) => {
+      return addToast({
+        message,
+        type: "info",
+        duration,
+        actionLabel,
+        onAction,
+        onClose,
+      });
+    },
+    [addToast]
+  );
+
   return {
     toasts,
     addToast,
@@ -53,5 +77,6 @@ export function useToast() {
     showSuccess,
     showError,
     showInfo,
+    showActionable,
   };
 }

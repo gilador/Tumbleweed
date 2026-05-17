@@ -4,7 +4,7 @@ import type { RosterState, UserShiftData } from "@/models";
 import { getDaySlice, getDisplayTime } from "@/service/weeklyScheduleUtils";
 import { getDayLabel, getTodayISO } from "@/service/dayLabelUtils";
 import { registerFonts } from "./registerFonts";
-import { processRtl } from "./rtlText";
+import { processRtl, shapeHebrew } from "./rtlText";
 
 interface StaffPdfOptions {
   staffName: string;
@@ -75,7 +75,7 @@ function getAssignmentsForStaff(
 export async function generateStaffPdf(options: StaffPdfOptions): Promise<Blob> {
   const { staffName, staffId, rosters, locale } = options;
   const isRtl = locale.startsWith("he");
-  const rtl = (text: string) => (isRtl ? processRtl(text) : text);
+  const shape = (text: string) => (isRtl ? processRtl(text) : shapeHebrew(text));
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   await registerFonts(doc);
@@ -85,7 +85,7 @@ export async function generateStaffPdf(options: StaffPdfOptions): Promise<Blob> 
   // Title
   doc.setFontSize(16);
   doc.setFont(fontName, "bold");
-  doc.text(rtl(staffName), isRtl ? doc.internal.pageSize.width - 14 : 14, 18, {
+  doc.text(shape(staffName), isRtl ? doc.internal.pageSize.width - 14 : 14, 18, {
     align: isRtl ? "right" : "left",
   });
 
@@ -100,7 +100,7 @@ export async function generateStaffPdf(options: StaffPdfOptions): Promise<Blob> 
       doc.setFontSize(12);
       doc.setFont(fontName, "bold");
       doc.text(
-        rtl(roster.name),
+        shape(roster.name),
         isRtl ? doc.internal.pageSize.width - 14 : 14,
         yPos,
         { align: isRtl ? "right" : "left" }
@@ -112,20 +112,20 @@ export async function generateStaffPdf(options: StaffPdfOptions): Promise<Blob> 
 
     const head = isRtl
       ? isWeekly
-        ? [[rtl("שעות"), rtl("תפקיד"), rtl("יום")]]
-        : [[rtl("שעות"), rtl("תפקיד")]]
+        ? [[shape("שעות"), shape("תפקיד"), shape("יום")]]
+        : [[shape("שעות"), shape("תפקיד")]]
       : isWeekly
-        ? [["Day", "Post", "Time"]]
-        : [["Post", "Time"]];
+        ? [[shape("Day"), shape("Post"), shape("Time")]]
+        : [[shape("Post"), shape("Time")]];
 
     const body = assignments.map((a) =>
       isRtl
         ? isWeekly
-          ? [a.time, rtl(a.post), rtl(a.day)]
-          : [a.time, rtl(a.post)]
+          ? [shape(a.time), shape(a.post), shape(a.day)]
+          : [shape(a.time), shape(a.post)]
         : isWeekly
-          ? [a.day, a.post, a.time]
-          : [a.post, a.time]
+          ? [shape(a.day), shape(a.post), shape(a.time)]
+          : [shape(a.post), shape(a.time)]
     );
 
     autoTable(doc, {
@@ -156,7 +156,7 @@ export async function generateStaffPdf(options: StaffPdfOptions): Promise<Blob> 
   doc.setFont(fontName, "normal");
   doc.setTextColor(150);
   doc.text(
-    "Powered by Tumbleweed",
+    shape("Powered by Tumbleweed"),
     doc.internal.pageSize.width / 2,
     pageHeight - 8,
     { align: "center" }

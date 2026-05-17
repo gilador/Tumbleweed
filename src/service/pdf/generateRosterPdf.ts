@@ -4,7 +4,7 @@ import type { RosterState, UserShiftData } from "@/models";
 import { getDaySlice, getDisplayTime } from "@/service/weeklyScheduleUtils";
 import { getDayLabel, getTodayISO } from "@/service/dayLabelUtils";
 import { registerFonts } from "./registerFonts";
-import { processRtl } from "./rtlText";
+import { processRtl, shapeHebrew } from "./rtlText";
 
 interface RosterPdfOptions {
   roster: RosterState;
@@ -66,7 +66,7 @@ export async function generateRosterPdf(options: RosterPdfOptions): Promise<Blob
   const isWeekly = scheduleMode === "7d";
   const numDays = isWeekly ? 7 : 1;
   const isRtl = locale.startsWith("he");
-  const rtl = (text: string) => (isRtl ? processRtl(text) : text);
+  const shape = (text: string) => (isRtl ? processRtl(text) : shapeHebrew(text));
 
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   await registerFonts(doc);
@@ -87,7 +87,7 @@ export async function generateRosterPdf(options: RosterPdfOptions): Promise<Blob
     const dateRange = startDate
       ? getDateRangeLabel(startDate)
       : "";
-    const titleText = rtl(dateRange ? `${title} — ${dateRange}` : title);
+    const titleText = shape(dateRange ? `${title} — ${dateRange}` : title);
     doc.text(titleText, isRtl ? pageWidth - 14 : 14, yPos, {
       align: isRtl ? "right" : "left",
     });
@@ -109,7 +109,7 @@ export async function generateRosterPdf(options: RosterPdfOptions): Promise<Blob
         doc.setFontSize(8);
         doc.setFont(fontName, "normal");
         doc.setTextColor(150);
-        doc.text("Powered by Tumbleweed", pageWidth / 2, pageHeight - 8, { align: "center" });
+        doc.text(shape("Powered by Tumbleweed"), pageWidth / 2, pageHeight - 8, { align: "center" });
         doc.setTextColor(0);
         doc.addPage();
         yPos = 15;
@@ -118,25 +118,25 @@ export async function generateRosterPdf(options: RosterPdfOptions): Promise<Blob
       // Day sub-header
       doc.setFontSize(10);
       doc.setFont(fontName, "bold");
-      const dayLabel = rtl(getDayLabel(startDate || getTodayISO(), dayIdx, locale));
+      const dayLabel = shape(getDayLabel(startDate || getTodayISO(), dayIdx, locale));
       doc.text(dayLabel, isRtl ? pageWidth - 14 : 14, yPos, {
         align: isRtl ? "right" : "left",
       });
       yPos += 5;
 
       // Build table data
-      const timeHeaders = dayHourIndices.map((hIdx) => getTimeRange(roster, hIdx));
+      const timeHeaders = dayHourIndices.map((hIdx) => shape(getTimeRange(roster, hIdx)));
       const head = isRtl
-        ? [[...timeHeaders.reverse(), rtl("תפקיד")]]
-        : [["Post", ...timeHeaders]];
+        ? [[...timeHeaders.reverse(), shape("תפקיד")]]
+        : [[shape("Post"), ...timeHeaders]];
 
       const body = posts.map((post, pIdx) => {
         const cells = dayHourIndices.map((hIdx) =>
-          rtl(resolveUserName(roster, userShiftData, pIdx, hIdx))
+          shape(resolveUserName(roster, userShiftData, pIdx, hIdx))
         );
         return isRtl
-          ? [...cells.reverse(), rtl(post.value)]
-          : [post.value, ...cells];
+          ? [...cells.reverse(), shape(post.value)]
+          : [shape(post.value), ...cells];
       });
 
       autoTable(doc, {
@@ -170,7 +170,7 @@ export async function generateRosterPdf(options: RosterPdfOptions): Promise<Blob
     doc.setFontSize(8);
     doc.setFont(fontName, "normal");
     doc.setTextColor(150);
-    doc.text("Powered by Tumbleweed", pageWidth / 2, pageHeight - 8, { align: "center" });
+    doc.text(shape("Powered by Tumbleweed"), pageWidth / 2, pageHeight - 8, { align: "center" });
     doc.setTextColor(0);
   } else {
     // Single-day mode: one table, same as before
@@ -179,23 +179,23 @@ export async function generateRosterPdf(options: RosterPdfOptions): Promise<Blob
 
     doc.setFontSize(14);
     doc.setFont(fontName, "bold");
-    doc.text(rtl(title), isRtl ? pageWidth - 14 : 14, yPos, {
+    doc.text(shape(title), isRtl ? pageWidth - 14 : 14, yPos, {
       align: isRtl ? "right" : "left",
     });
     yPos += 10;
 
-    const timeHeaders = dayHourIndices.map((hIdx) => getTimeRange(roster, hIdx));
+    const timeHeaders = dayHourIndices.map((hIdx) => shape(getTimeRange(roster, hIdx)));
     const head = isRtl
-      ? [[...timeHeaders.reverse(), rtl("תפקיד")]]
-      : [["Post", ...timeHeaders]];
+      ? [[...timeHeaders.reverse(), shape("תפקיד")]]
+      : [[shape("Post"), ...timeHeaders]];
 
     const body = posts.map((post, pIdx) => {
       const cells = dayHourIndices.map((hIdx) =>
-        rtl(resolveUserName(roster, userShiftData, pIdx, hIdx))
+        shape(resolveUserName(roster, userShiftData, pIdx, hIdx))
       );
       return isRtl
-        ? [...cells.reverse(), rtl(post.value)]
-        : [post.value, ...cells];
+        ? [...cells.reverse(), shape(post.value)]
+        : [shape(post.value), ...cells];
     });
 
     autoTable(doc, {
@@ -224,7 +224,7 @@ export async function generateRosterPdf(options: RosterPdfOptions): Promise<Blob
     doc.setFontSize(8);
     doc.setFont(fontName, "normal");
     doc.setTextColor(150);
-    doc.text("Powered by Tumbleweed", pageWidth / 2, pageHeight - 8, { align: "center" });
+    doc.text(shape("Powered by Tumbleweed"), pageWidth / 2, pageHeight - 8, { align: "center" });
     doc.setTextColor(0);
   }
 

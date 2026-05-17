@@ -1,72 +1,64 @@
-import { test, expect, Page } from "@playwright/test";
-import { createRequire } from "module";
+import { test, expect, devices, Page } from "@playwright/test";
+import { installInitScript, waitForMobileApp } from "./helpers";
 
-const require = createRequire(import.meta.url);
-const t = require("../../src/locales/he.json");
+test.use({ ...devices["Pixel 7"] });
 
-async function dismissDrivePrompt(page: Page) {
-  const notNowButton = page.getByRole("button", { name: /לא עכשיו|Not now/i });
-  await notNowButton.click({ timeout: 10000 }).catch(() => {});
-}
+// SharePopup trigger has title="Share Schedule" (en). Dialog body contains
+// Full Roster / Staff Member toggle, Download PDF / Print / WhatsApp options.
 
 async function setupMobileWithAssignments(page: Page) {
-  await page.addInitScript(() => localStorage.clear());
-  await page.goto("/tumbleweed/");
-  await dismissDrivePrompt(page);
+  await waitForMobileApp(page);
 
-  await expect(page.locator("h1").first()).toBeVisible({ timeout: 10000 });
+  // Navigate to staff and add 3 staff via FAB.
+  await page.getByRole("navigation").getByRole("button", { name: "Staff" }).click();
+  await expect(page.getByRole("heading", { name: /^Staff$/ })).toBeVisible();
 
-  // Go to staff tab using bottom nav
-  const bottomNav = page.locator("nav, [role='tablist']");
-  const staffNavItem = bottomNav.locator(`text=${t.staff}`).first();
-  if (await staffNavItem.isVisible().catch(() => false)) {
-    await staffNavItem.click();
-  }
-
-  await expect(page.getByRole("heading", { name: t.staff })).toBeVisible({ timeout: 5000 });
-
-  // Add 3 staff via FAB
   const addFab = page.locator("button.fixed").filter({ has: page.locator("svg") });
   for (let i = 0; i < 3; i++) {
     await addFab.click();
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(150);
   }
 
-  // Navigate to assignments tab
-  const assignmentsNavItem = bottomNav.locator(`text=${t.assignments}`).first();
-  if (await assignmentsNavItem.isVisible().catch(() => false)) {
-    await assignmentsNavItem.click();
-  }
-  await expect(page.getByRole("heading", { name: t.assignments })).toBeVisible({ timeout: 5000 });
-
-  // Run optimization via FAB
-  const optimizeFab = page.locator("button.fixed.rounded-full");
-  await optimizeFab.click();
+  // Navigate to assignments.
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Assignments" })
+    .click();
   await expect(
-    page.getByText(t.noAssignmentsYet)
-  ).not.toBeVisible({ timeout: 30000 });
+    page.getByRole("heading", { name: /^Assignments$/ })
+  ).toBeVisible();
+
+  // Run optimization.
+  const fab = page.locator("button.fixed.rounded-full");
+  await fab.click();
+  await expect(page.getByText("No assignments yet")).not.toBeVisible({
+    timeout: 30000,
+  });
 }
 
 async function openSharePopup(page: Page) {
-  const shareBtn = page.locator(`button[title="${t.shareSchedule}"]`);
+  const shareBtn = page.locator('button[title="Share Schedule"]');
   await expect(shareBtn).toBeVisible();
   await shareBtn.click();
   await expect(page.locator('[role="dialog"]')).toBeVisible();
 }
 
 test.describe("Mobile Share Popup", () => {
+  test.beforeEach(async ({ page }) => {
+    await installInitScript(page);
+  });
+
   test("opens share dialog and shows all controls", async ({ page }) => {
     await setupMobileWithAssignments(page);
     await openSharePopup(page);
 
     const dialog = page.locator('[role="dialog"]');
+    await expect(dialog.getByText("Full Roster", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("Staff Member", { exact: true })).toBeVisible();
 
-    await expect(dialog.getByText(t.fullRoster, { exact: true })).toBeVisible();
-    await expect(dialog.getByText(t.staffMember, { exact: true })).toBeVisible();
-
-    await expect(dialog.getByText(t.downloadPdf)).toBeVisible();
-    await expect(dialog.getByText(t.print, { exact: true })).toBeVisible();
-    await expect(dialog.getByText(t.whatsapp)).toBeVisible();
+    await expect(dialog.getByText("Download PDF")).toBeVisible();
+    await expect(dialog.getByText("Print", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("WhatsApp")).toBeVisible();
   });
 
   test("can switch to staff member view and see staff list", async ({ page }) => {
@@ -74,14 +66,13 @@ test.describe("Mobile Share Popup", () => {
     await openSharePopup(page);
 
     const dialog = page.locator('[role="dialog"]');
-    await dialog.getByText(t.staffMember, { exact: true }).click();
+    await dialog.getByText("Staff Member", { exact: true }).click();
 
     const staffList = dialog.locator(".max-h-\\[160px\\]");
     await expect(staffList).toBeVisible();
 
     const staffButtons = staffList.locator("button");
-    const count = await staffButtons.count();
-    expect(count).toBeGreaterThan(0);
+    expect(await staffButtons.count()).toBeGreaterThan(0);
   });
 
   test("download PDF works on mobile", async ({ page }) => {
@@ -90,7 +81,7 @@ test.describe("Mobile Share Popup", () => {
 
     const dialog = page.locator('[role="dialog"]');
     const downloadPromise = page.waitForEvent("download", { timeout: 15000 });
-    await dialog.getByText(t.downloadPdf).click();
+    await dialog.getByText("Download PDF").click();
 
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toMatch(/\.pdf$/);

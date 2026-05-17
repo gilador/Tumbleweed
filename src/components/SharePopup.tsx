@@ -33,7 +33,9 @@ interface SharePopupProps {
 
 const isMobile =
   typeof window !== "undefined" &&
-  /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) &&
+  (navigator.maxTouchPoints > 0 ||
+    window.matchMedia("(hover: none) and (pointer: coarse)").matches);
 
 function getAssignedStaffIds(
   rosters: RosterState[],
@@ -153,8 +155,12 @@ export function SharePopup({ onCopied, disabled }: SharePopupProps) {
       const a = document.createElement("a");
       a.href = url;
       a.download = filename;
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 1000);
     }
     setOpen(false);
   };
@@ -176,25 +182,28 @@ export function SharePopup({ onCopied, disabled }: SharePopupProps) {
 
   const handleWhatsApp = async () => {
     trackEvent("whatsapp-shared", { type: viewMode === "staff" ? "staff" : "roster" });
-    const pdfs = await generatePdfs();
-    if (pdfs.length === 0) return;
 
-    // Mobile: try native share with file
-    if (isMobile && typeof navigator.share === "function") {
-      try {
-        const files = pdfs.map(
-          ({ filename, blob }) => new File([blob], filename, { type: "application/pdf" })
-        );
-        await navigator.share({ files });
-        setOpen(false);
-        return;
-      } catch {
-        // User cancelled or share failed — fall through to download
-      }
+    // Desktop has no useful share path — wa.me URLs can't carry an attachment,
+    // and the Web Share API on desktop just opens a system sheet that can't reach
+    // WhatsApp. Save the PDF locally so the user can attach it manually.
+    if (!isMobile || typeof navigator.share !== "function") {
+      await handleDownload();
+      return;
     }
 
-    // Desktop: if Drive connected, we could share a link, but for now just download
-    await handleDownload();
+    // Mobile: native share with the PDF file attached (opens WhatsApp / share sheet)
+    const pdfs = await generatePdfs();
+    if (pdfs.length === 0) return;
+    try {
+      const files = pdfs.map(
+        ({ filename, blob }) => new File([blob], filename, { type: "application/pdf" })
+      );
+      await navigator.share({ files });
+      setOpen(false);
+    } catch {
+      // User cancelled or share failed — fall back to download
+      await handleDownload();
+    }
   };
 
   const handleDriveExport = async () => {
