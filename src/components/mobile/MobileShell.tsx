@@ -15,6 +15,8 @@ import { SettingsTab } from "./SettingsTab";
 import { StaffTab } from "./StaffTab";
 import { StaffAvailability } from "./StaffAvailability";
 import { AssignmentsTab } from "./AssignmentsTab";
+import { BulkSelectionBar } from "../BulkSelectionBar";
+import { useMultiSelect } from "../../stores/selectionStore";
 import { trackEvent } from "../../lib/analytics";
 
 export type MobileRoute =
@@ -83,6 +85,13 @@ export function MobileShell() {
       : "assignments";
 
   const isDrillDown = route.screen === "staff-availability";
+
+  const { inMulti, exitMulti } = useMultiSelect();
+  const inStaffMulti = inMulti("staff");
+  const [showMultiSlot, setShowMultiSlot] = useState(false);
+  useEffect(() => {
+    if (inStaffMulti) setShowMultiSlot(true);
+  }, [inStaffMulti]);
 
   const staffListRef = useRef<HTMLDivElement | null>(null);
   const staffScrollTopRef = useRef(0);
@@ -179,7 +188,6 @@ export function MobileShell() {
               assignments={activeRoster.assignments || []}
               onSelectUser={handleNavigateToAvailability}
               onAddUser={handleAddUser}
-              onRemoveUser={(userId) => removeUsers([userId])}
               onUpdateUserName={updateUserName}
             />
           </div>
@@ -216,8 +224,25 @@ export function MobileShell() {
         )}
       </div>
 
-      {/* Tab bar -- hidden during drill-down */}
-      {!isDrillDown && (
+      {/* Bulk selection bar -- replaces tab bar while staff multi-select is active */}
+      {showMultiSlot && (
+        <div className="flex-none border-t border-border bg-background">
+          <BulkSelectionBar
+            kind="staff"
+            total={(recoilState.userShiftData || []).length}
+            allIds={(recoilState.userShiftData || []).map((u) => u.user.id)}
+            onBulkDelete={(ids) => {
+              removeUsers(ids);
+              exitMulti();
+            }}
+            inline={false}
+            onExitComplete={() => setShowMultiSlot(false)}
+          />
+        </div>
+      )}
+
+      {/* Tab bar -- hidden during drill-down and during staff multi-select */}
+      {!isDrillDown && !showMultiSlot && (
         <MobileTabBar activeTab={activeTab} onTabChange={handleTabChange} />
       )}
 

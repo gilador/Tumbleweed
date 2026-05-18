@@ -27,12 +27,15 @@ export function StaffSectionHeader({
           className="text-xs text-muted-foreground inline-flex items-center gap-1.5 tabular-nums"
           dir="ltr"
         >
-          <b className="text-foreground font-semibold">
-            {t("staffCount", { count: staffCount })}
-          </b>
+          <span>
+            <b className="text-foreground font-semibold me-1">{staffCount}</b>{" "}
+            {t("staffLabel")}
+          </span>
           <span className="text-border-strong">·</span>
-          <b className="text-foreground font-semibold">{avgShifts}</b>
-          <span>{t("avgShiftsLabel")}</span>
+          <span>
+            <b className="text-foreground font-semibold me-1">{avgShifts}</b>{" "}
+            {t("avgShiftsLabel")}
+          </span>
         </span>
       </div>
       <div

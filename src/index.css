@@ -10,6 +10,13 @@
   .dark .dark-invert {
     filter: invert(1) hue-rotate(180deg);
   }
+  /* Suppress iOS touch callout / Android long-press context menu for
+     rows that own their own long-press gesture (see useLongPress). */
+  .no-touch-callout {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
 }
 
 @layer base {

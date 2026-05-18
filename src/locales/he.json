@@ -98,6 +98,10 @@
   "durationEach": "{{duration}} שעות כל אחד",
   "avgShifts": "{{avg}} ממוצע משמרות",
   "avgShiftsLabel": "ממוצע משמרות",
+  "avgShiftDurationLabel": "משך ממוצע",
+  "staffLabel": "אנשי צוות",
+  "positionsLabel": "עמדות",
+  "shiftsPerDayLabel": "משמרות/יום",
   "submissionCountNew": "{{count}} חדשים",
 
   "userAvailability": "הזמינות של {{name}}",
