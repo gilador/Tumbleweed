@@ -1,65 +1,67 @@
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
-// Regression guard for the desktop WhatsApp share path. Pre-fix, handleWhatsApp
-// called generatePdfs() unconditionally at the top, then fell through to
-// handleDownload() — wasting one generation on desktop and entangling the
-// "share" code path with the "save" code path. Per CEO directive, the desktop
-// WhatsApp button must SAVE A PDF (no share attempt, no Web Share API call).
+// Regression guard for the desktop WhatsApp share path. The desktop button must
+// open `https://wa.me/?text=<encoded summary>` in a new tab — NOT download a PDF.
 //
-// Jest in this package runs in `node` env with no JSDOM / RTL (see
-// jest.config.cjs; no @testing-library/react dep; workspace rules forbid
-// adding new deps for this fix). The source-shape regex pattern from
-// availabilityHeatmap.test.ts is the established substitute for render-tree
-// assertions.
+// `window.open` must run on the same event-loop tick as the click handler so the
+// Safari popup blocker treats it as a user gesture. The tests below enforce:
+//   1. The desktop branch contains `window.open(\`https://wa.me/?text=...\`)`.
+//   2. No `await` precedes the first `window.open` in the desktop branch.
+//   3. The desktop branch does NOT call `handleDownload` (that fallback only
+//      lives in the mobile share-cancellation `catch`).
+//   4. The eb75ca3 regressions (maxTouchPoints / pointer: coarse / setTimeout
+//      1000) are gone.
 //
-// Fail-before / pass-after:
-// - Pre-fix: handleWhatsApp opened with `const pdfs = await generatePdfs()`
-//   on the very first line of the function body (the "guard at top" pattern
-//   the first regex looks for). Today the function opens with trackEvent +
-//   a desktop short-circuit, so the "guards-at-top" regex no longer matches.
-// - Post-fix: the desktop short-circuit `if (!isMobile || ...)` followed by
-//   `await handleDownload(); return;` is now present.
-describe("SharePopup — WhatsApp button on desktop saves PDF (no share attempt)", () => {
+// The desktop branch is identified by splitting `handleWhatsApp`'s body on the
+// stable comment marker `// Mobile`. Keep that marker in SharePopup.tsx.
+describe("SharePopup — desktop WhatsApp opens wa.me synchronously (no PDF)", () => {
   const SOURCE = readFileSync(
     resolve(__dirname, "../SharePopup.tsx"),
     "utf8"
   );
 
-  it("short-circuits to handleDownload when not on mobile or Web Share API is unavailable", () => {
+  it("opens wa.me in the desktop branch", () => {
     expect(SOURCE).toMatch(
-      /if\s*\(\s*!isMobile\s*\|\|\s*typeof\s+navigator\.share\s*!==\s*"function"\s*\)\s*\{\s*await\s+handleDownload\(\)\s*;\s*return\s*;/
+      /window\.open\(\s*`https:\/\/wa\.me\/\?text=\$\{[^}]+\}`/
     );
   });
 
-  it("no longer generates PDFs before checking the desktop branch (avoids wasted generation)", () => {
-    // Pre-fix shape: handleWhatsApp's first awaited call was generatePdfs.
-    // Post-fix: the first awaited call inside handleWhatsApp must be handleDownload
-    // (the desktop fast path) — not generatePdfs.
+  it("does not call handleDownload from handleWhatsApp on the desktop path", () => {
     const handler = SOURCE.match(
       /const\s+handleWhatsApp\s*=\s*async\s*\(\)\s*=>\s*\{([\s\S]*?)\n\s{2}\};/
     );
     expect(handler).not.toBeNull();
     const body = handler![1];
-    // The first `await` token inside the function body must be `await handleDownload`,
-    // not `await generatePdfs`.
-    const firstAwait = body.match(/await\s+(\w+)/);
-    expect(firstAwait).not.toBeNull();
-    expect(firstAwait![1]).toBe("handleDownload");
+    const desktopBranch = body.split("// Mobile")[0];
+    expect(desktopBranch).not.toMatch(/await\s+handleDownload/);
   });
 
-  it("keeps navigator.share() invocation gated behind the isMobile branch", () => {
-    // navigator.share should still exist (mobile path), but only after the
-    // isMobile-positive branch — never as a desktop fallback.
-    expect(SOURCE).toMatch(/navigator\.share\(\s*\{\s*files\s*\}\s*\)/);
+  it("opens window.open synchronously (no await before it) on the desktop branch", () => {
+    const handler = SOURCE.match(
+      /const\s+handleWhatsApp\s*=\s*async\s*\(\)\s*=>\s*\{([\s\S]*?)\n\s{2}\};/
+    );
+    expect(handler).not.toBeNull();
+    const body = handler![1];
+    const desktopBranch = body.split("// Mobile")[0];
+    const firstOpenIdx = desktopBranch.indexOf("window.open");
+    expect(firstOpenIdx).toBeGreaterThan(-1);
+    const sliceBeforeOpen = desktopBranch.slice(0, firstOpenIdx);
+    expect(sliceBeforeOpen).not.toMatch(/\bawait\b/);
   });
 
-  it("still tracks the whatsapp-shared event on click (analytics unchanged)", () => {
+  it("still tracks the whatsapp-shared event", () => {
     expect(SOURCE).toMatch(/trackEvent\("whatsapp-shared"/);
   });
 
-  it("isMobile constant combines UA check with maxTouchPoints / pointer-coarse guard", () => {
-    expect(SOURCE).toMatch(/maxTouchPoints\s*>\s*0/);
-    expect(SOURCE).toMatch(/pointer: coarse/);
+  it("isMobile reverted to plain UA regex (no maxTouchPoints, no pointer-coarse)", () => {
+    expect(SOURCE).not.toMatch(/maxTouchPoints/);
+    expect(SOURCE).not.toMatch(/pointer: coarse/);
+  });
+
+  it("URL.revokeObjectURL timeout reverted to 0 (not 1000)", () => {
+    expect(SOURCE).not.toMatch(
+      /revokeObjectURL[\s\S]{0,80}setTimeout[^,]+,\s*1000/
+    );
   });
 });

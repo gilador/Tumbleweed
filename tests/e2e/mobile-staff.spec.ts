@@ -3,10 +3,12 @@ import { installInitScript, waitForMobileApp } from "./helpers";
 
 test.use({ ...devices["Pixel 7"] });
 
-// Group C — Mobile staff list + drill-down. Re-authored from the skipped
-// stubs. Mobile shell renders the staff list under tab bar "Staff", with
-// a per-row pencil edit affordance (covered in mobile-staff-edit.spec.ts)
-// and a chevron tap target that navigates to the full-screen drill-down
+// Group C — Mobile staff list + drill-down. Re-authored after the
+// fix-mobile-staff-item-align-with-desktop-multiselect change: inline
+// pencil/trash buttons are gone, replaced by long-press on the name span
+// (rename, covered in mobile-staff-edit.spec.ts) and long-press elsewhere
+// on the row (multi-select, covered in mobile-staff-multiselect.spec.ts).
+// The chevron tap target still navigates to the full-screen drill-down
 // (StaffAvailability.tsx). FAB and tab bar are hidden during drill-down.
 
 const navigateToStaff = async (page: Page) => {
@@ -53,33 +55,49 @@ test.describe("Mobile Staff Tab", () => {
     await expect(firstMember.locator("svg.icon-flip")).toHaveCount(1);
   });
 
-  test("can delete a staff member with inline confirmation", async ({ page }) => {
+  test("can delete a single staff member via long-press → multi-select → Delete", async ({
+    page,
+  }) => {
     const rows = page.locator(".rounded-lg.border");
     const before = await rows.count();
     const firstMember = rows.first();
-    // Trash button is the last button in the row.
-    await firstMember.locator("button").last().click();
-    // Inline confirmation appears.
-    await expect(firstMember.getByText(/Delete/)).toBeVisible();
-    // Tap the check button to confirm.
-    await firstMember
-      .locator("button")
-      .filter({ has: page.locator("svg") })
-      .first()
-      .click();
+
+    // Long-press the row body (right side, past the name span) to enter
+    // multi-select with that row pre-selected.
+    const box = await firstMember.boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.move(box!.x + box!.width * 0.85, box!.y + box!.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(700);
+    await page.mouse.up();
+
+    await expect(
+      page.getByRole("region", { name: /1 selected/i })
+    ).toBeVisible();
+    await page.getByRole("button", { name: /delete 1/i }).click();
+    await page.getByRole("button", { name: /yes/i }).click();
     await expect(rows).toHaveCount(before - 1);
   });
 
-  test("can cancel delete of staff member", async ({ page }) => {
+  test("can cancel multi-select without deleting", async ({ page }) => {
     const rows = page.locator(".rounded-lg.border");
     const before = await rows.count();
     const firstMember = rows.first();
-    await firstMember.locator("button").last().click();
-    await expect(firstMember.getByText(/Delete/)).toBeVisible();
-    // Tap the X (cancel) — second button in the inline confirm cluster.
-    const buttons = firstMember.locator("button");
-    await buttons.nth(1).click();
+
+    const box = await firstMember.boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.move(box!.x + box!.width * 0.85, box!.y + box!.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(700);
+    await page.mouse.up();
+
+    await expect(
+      page.getByRole("region", { name: /1 selected/i })
+    ).toBeVisible();
+    await page.getByRole("button", { name: /cancel/i }).click();
+    // Bar disappears, all rows still present.
     await expect(rows).toHaveCount(before);
+    await expect(page.getByRole("navigation")).toBeVisible();
   });
 
   test("tapping a staff member navigates to availability drill-down", async ({
@@ -109,20 +127,26 @@ test.describe("Mobile Staff Tab", () => {
     await expect(page.getByRole("navigation")).toBeVisible();
   });
 
-  test("long-press on staff row is a no-op (no multi-select)", async ({
+  test("long-press on staff row body enters multi-select (desktop parity)", async ({
     page,
   }) => {
     const firstMember = page.locator(".rounded-lg.border").first();
-    const target = firstMember.locator("button.flex-1");
-    const box = await target.boundingBox();
+    const box = await firstMember.boundingBox();
     expect(box).not.toBeNull();
-    await page.mouse.move(box!.x + 10, box!.y + 10);
+    // Press on the right side of the row, past the name span (outside the
+    // long-press name hot-zone) so we resolve to the multi-select branch.
+    await page.mouse.move(box!.x + box!.width * 0.85, box!.y + box!.height / 2);
     await page.mouse.down();
-    await page.waitForTimeout(800);
+    await page.waitForTimeout(700);
     await page.mouse.up();
-    // Either we entered drill-down (mouseup triggered click) or stayed on list.
-    // Critical assertion: no multi-select indicator appears (no checkbox UI).
-    await expect(page.locator("input[type='checkbox']")).toHaveCount(0);
+    // BulkSelectionBar appears with that row pre-selected.
+    await expect(
+      page.getByRole("region", { name: /1 selected/i })
+    ).toBeVisible();
+    // Tab bar hidden while the bar is up.
+    await expect(page.getByRole("navigation")).toHaveCount(0);
+    // Drill-down was NOT entered.
+    await expect(page.getByText("All Available")).toHaveCount(0);
   });
 
   test("Weekdays only writes Sun-Thu available, Fri-Sat unavailable (24h mode default)", async ({

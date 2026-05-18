@@ -98,6 +98,10 @@
   "durationEach": "{{duration}}h each",
   "avgShifts": "{{avg}} avg shifts",
   "avgShiftsLabel": "avg shifts",
+  "avgShiftDurationLabel": "avg shift",
+  "staffLabel": "staff",
+  "positionsLabel": "positions",
+  "shiftsPerDayLabel": "shifts/day",
   "submissionCountNew": "{{count}} new",
 
   "userAvailability": "{{name}}'s Availability",

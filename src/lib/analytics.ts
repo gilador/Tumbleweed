@@ -49,6 +49,7 @@ type CoreEventMap = {
   };
   "staff-detail-open": { staffId: string };
   "staff-detail-back": Record<string, never>;
+  "staff-multi-select-entered": { source: "mobile-long-press" };
   "staff-bulk-action": {
     action: "all-available" | "all-unavailable" | "weekdays-only" | "weekends-only";
   };

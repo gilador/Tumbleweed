@@ -57,7 +57,9 @@ async function setupDesktopWithAssignments(page: Page) {
   await page.addInitScript(() => localStorage.clear());
   await page.goto("/tumbleweed/");
   await dismissDrivePrompt(page);
-  await expect(page.getByRole("heading", { name: t.staff })).toBeVisible({
+  await expect(
+    page.getByRole("heading", { name: t.staff, exact: true })
+  ).toBeVisible({
     timeout: 10000,
   });
 
@@ -177,19 +179,29 @@ test.describe("Share Popup - Desktop", () => {
     expect(download.suggestedFilename()).toMatch(/\.pdf$/);
   });
 
-  test("WhatsApp on desktop triggers a PDF download (no new tab, no print dialog)", async ({ page, context }) => {
+  test("WhatsApp on desktop opens wa.me in a new tab with locale-aware pre-filled text", async ({ page, context }) => {
     await openSharePopup(page);
-
-    const downloadPromise = page.waitForEvent("download", { timeout: 15000 });
     const dialog = page.locator('[role="dialog"]');
+
+    const pagePromise = context.waitForEvent("page", { timeout: 10000 });
     await dialog.getByText(t.whatsapp).click();
 
-    const download = await downloadPromise;
-    expect(download.suggestedFilename()).toMatch(/\.pdf$/);
+    const newPage = await pagePromise;
+    await newPage.waitForURL(/wa\.me/, { timeout: 5000 }).catch(() => {});
+    const url = newPage.url();
+    expect(url).toMatch(/^https:\/\/wa\.me\/\?text=/);
 
-    // Assert no new page was opened (new tab / blob nav opens a new page).
-    await page.waitForTimeout(500);
-    expect(context.pages()).toHaveLength(1);
+    const textParam = new URL(url).searchParams.get("text") ?? "";
+    expect(textParam).toContain("Shift Schedule");
+
+    // Decode the text param and verify a Hebrew or post-name fragment round-trips
+    const decoded = decodeURIComponent(textParam);
+    expect(decoded).toMatch(/עמדה|Member \d+|עובד \d+/);
+
+    // Dialog must close after open
+    await expect(dialog).not.toBeVisible();
+
+    await newPage.close();
   });
 
   test("closes dialog via close button", async ({ page }) => {
@@ -317,7 +329,7 @@ test.describe("Share Popup - PDF Content (Weekly 7D)", () => {
     await page.addInitScript(() => localStorage.clear());
     await page.goto("/tumbleweed/");
     await dismissDrivePrompt(page);
-    await expect(page.getByRole("heading", { name: t.staff })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole("heading", { name: t.staff, exact: true })).toBeVisible({ timeout: 10000 });
 
     // Default is 2 staff, add 5 more for 7 total
     await addStaff(page, 5);

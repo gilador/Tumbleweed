@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { UserShiftData } from "../../models";
-import { IconPlus, IconTrash, IconChevronRight, IconCheck, IconX, IconPencil } from "@tabler/icons-react";
+import { IconPlus, IconChevronRight, IconCheck, IconX } from "@tabler/icons-react";
+import { useMultiSelect } from "../../stores/selectionStore";
+import { useLongPress } from "../../hooks/useLongPress";
+import { trackEvent } from "../../lib/analytics";
 
 interface StaffTabProps {
   userShiftData: UserShiftData[];
   assignments: (string | null)[][];
   onSelectUser: (userId: string) => void;
   onAddUser: () => void;
-  onRemoveUser: (userId: string) => void;
   onUpdateUserName: (userId: string, newName: string) => void;
 }
 
@@ -17,13 +19,42 @@ export function StaffTab({
   assignments,
   onSelectUser,
   onAddUser,
-  onRemoveUser,
   onUpdateUserName,
 }: StaffTabProps) {
   const { t } = useTranslation();
-  const [deleteConfirmUserId, setDeleteConfirmUserId] = useState<string | null>(null);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+  const {
+    inMulti,
+    isMultiChecked,
+    enterMulti,
+    toggleInMulti,
+  } = useMultiSelect();
+  const inStaffMulti = inMulti("staff");
+
+  const longPress = useLongPress({
+    onLongPress: (target) => {
+      const el = target as HTMLElement;
+      const row = el.closest("[data-staff-row-id]") as HTMLElement | null;
+      if (row === null) return;
+      const userId = row.getAttribute("data-staff-row-id");
+      if (userId === null) return;
+      const userData = userShiftData.find((u) => u.user.id === userId);
+      if (userData === undefined) return;
+      const zone = el
+        .closest("[data-longpress-zone]")
+        ?.getAttribute("data-longpress-zone");
+      if (zone === "name") {
+        if (inStaffMulti) return;
+        setEditingUserId(userId);
+        setEditingName(userData.user.name);
+        return;
+      }
+      if (editingUserId !== null) return;
+      enterMulti([userId], "staff");
+      trackEvent("staff-multi-select-entered", { source: "mobile-long-press" });
+    },
+  });
 
   const getAssignmentCount = (userId: string): number => {
     let count = 0;
@@ -55,38 +86,25 @@ export function StaffTab({
         <div className="space-y-1">
           {userShiftData.map((userData) => {
             const assignmentCount = getAssignmentCount(userData.user.id);
-            const isDeleting = deleteConfirmUserId === userData.user.id;
             const isEditing = editingUserId === userData.user.id;
+            const isChecked = isMultiChecked(userData.user.id, "staff");
+            const containerCls = [
+              "flex items-center min-h-[52px] rounded-lg border no-touch-callout select-none",
+              isChecked ? "bg-primary/10 border-primary" : "border-border",
+            ].join(" ");
 
             return (
               <div
                 key={userData.user.id}
-                className="flex items-center min-h-[52px] rounded-lg border border-border"
+                data-staff-row-id={userData.user.id}
+                className={containerCls}
+                onPointerDown={isEditing ? undefined : longPress.onPointerDown}
+                onPointerMove={isEditing ? undefined : longPress.onPointerMove}
+                onPointerUp={isEditing ? undefined : longPress.onPointerUp}
+                onPointerCancel={isEditing ? undefined : longPress.onPointerCancel}
+                onContextMenu={isEditing ? undefined : longPress.onContextMenu}
               >
-                {isDeleting ? (
-                  <div className="flex-1 flex items-center justify-between px-4 py-2">
-                    <span className="text-sm text-destructive">
-                      {t("deleteUserConfirm", { name: userData.user.name })}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => {
-                          onRemoveUser(userData.user.id);
-                          setDeleteConfirmUserId(null);
-                        }}
-                        className="p-2 rounded-md bg-destructive/10 hover:bg-destructive/20 min-h-[44px] min-w-[44px] flex items-center justify-center"
-                      >
-                        <IconCheck size={16} className="text-destructive" />
-                      </button>
-                      <button
-                        onClick={() => setDeleteConfirmUserId(null)}
-                        className="p-2 rounded-md hover:bg-accent min-h-[44px] min-w-[44px] flex items-center justify-center"
-                      >
-                        <IconX size={16} />
-                      </button>
-                    </div>
-                  </div>
-                ) : isEditing ? (
+                {isEditing ? (
                   <div className="flex-1 flex items-center gap-2 px-4 py-2">
                     <input
                       type="text"
@@ -128,38 +146,40 @@ export function StaffTab({
                     </button>
                   </div>
                 ) : (
-                  <>
-                    <button
-                      onClick={() => onSelectUser(userData.user.id)}
-                      className="flex-1 flex items-center justify-between px-4 py-2 min-h-[52px] text-start"
-                    >
-                      <span className="text-sm font-medium">{userData.user.name}</span>
-                      <div className="flex items-center gap-2">
-                        {assignmentCount > 0 && (
-                          <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
-                            {assignmentCount}
-                          </span>
-                        )}
+                  <button
+                    onClick={(e) => {
+                      if (longPress.justLongPressed()) {
+                        e.preventDefault();
+                        return;
+                      }
+                      if (inStaffMulti) {
+                        toggleInMulti(userData.user.id);
+                        return;
+                      }
+                      onSelectUser(userData.user.id);
+                    }}
+                    className="flex-1 flex items-center justify-between px-4 py-2 min-h-[52px] text-start"
+                  >
+                    <span data-longpress-zone="name" className="text-sm font-medium">
+                      {userData.user.name}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {assignmentCount > 0 && (
+                        <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
+                          {assignmentCount}
+                        </span>
+                      )}
+                      {inStaffMulti ? (
+                        isChecked ? (
+                          <IconCheck size={16} className="text-primary" />
+                        ) : (
+                          <span className="size-4 rounded-full border border-border" />
+                        )
+                      ) : (
                         <IconChevronRight size={16} className="text-muted-foreground icon-flip" />
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setEditingUserId(userData.user.id);
-                        setEditingName(userData.user.name);
-                      }}
-                      className="p-3 hover:bg-accent min-h-[52px] flex items-center justify-center border-s border-border"
-                      data-testid={`edit-staff-${userData.user.id}`}
-                    >
-                      <IconPencil size={16} className="text-muted-foreground" />
-                    </button>
-                    <button
-                      onClick={() => setDeleteConfirmUserId(userData.user.id)}
-                      className="p-3 hover:bg-accent min-h-[52px] flex items-center justify-center border-s border-border"
-                    >
-                      <IconTrash size={16} className="text-muted-foreground" />
-                    </button>
-                  </>
+                      )}
+                    </div>
+                  </button>
                 )}
               </div>
             );

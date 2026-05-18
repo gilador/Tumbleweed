@@ -4,7 +4,7 @@ import { useRecoilValue } from "recoil";
 import { IconShare, IconPrinter, IconCopy, IconBrandWhatsapp } from "@tabler/icons-react";
 import html2canvas from "html2canvas";
 import type { UniqueString, UserShiftData } from "../models";
-import { generateTextSummary } from "../service/textSummary";
+import { buildScheduleShareText } from "../lib/shareSummary";
 import { shiftState, getActiveRosterFromState } from "../stores/shiftStore";
 import { trackEvent } from "../lib/analytics";
 
@@ -25,37 +25,22 @@ const isMobile = typeof window !== "undefined" && /iPhone|iPad|iPod|Android/i.te
 const canNativeShare = isMobile && typeof navigator !== "undefined" && typeof navigator.share === "function";
 
 export function ShareButton({
-  posts,
-  hours,
-  assignments,
   userShiftData,
-  endTime,
-  customCellDisplayNames,
-  groupBy,
   onCopied,
   disabled,
 }: ShareButtonProps) {
   const { t, i18n } = useTranslation();
   const state = useRecoilValue(shiftState);
   const activeRoster = getActiveRosterFromState(state);
-  const scheduleMode = activeRoster.scheduleMode;
-  const startDate = activeRoster.startDate;
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const getSummary = () =>
-    generateTextSummary({
-      posts,
-      hours,
-      assignments,
+    buildScheduleShareText(
+      [activeRoster],
       userShiftData,
-      endTime,
-      customCellDisplayNames,
-      groupBy,
-      scheduleMode,
-      startDate,
-      locale: i18n.language === "he" ? "he-IL" : "en-US",
-    });
+      i18n.language === "he" ? "he-IL" : "en-US"
+    );
 
   const handleNativeShare = async () => {
     try {

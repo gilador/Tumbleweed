@@ -23,6 +23,7 @@ import { hasGoogleDriveAccess } from "@/lib/googleDrive";
 import { exportScheduleToDrive } from "@/lib/driveExport";
 import type { RosterState, UserShiftData } from "@/models";
 import { trackEvent } from "@/lib/analytics";
+import { buildScheduleShareText } from "@/lib/shareSummary";
 
 type ViewMode = "full" | "staff";
 
@@ -33,9 +34,7 @@ interface SharePopupProps {
 
 const isMobile =
   typeof window !== "undefined" &&
-  /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) &&
-  (navigator.maxTouchPoints > 0 ||
-    window.matchMedia("(hover: none) and (pointer: coarse)").matches);
+  /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
 function getAssignedStaffIds(
   rosters: RosterState[],
@@ -160,7 +159,7 @@ export function SharePopup({ onCopied, disabled }: SharePopupProps) {
       setTimeout(() => {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-      }, 1000);
+      }, 0);
     }
     setOpen(false);
   };
@@ -181,17 +180,24 @@ export function SharePopup({ onCopied, disabled }: SharePopupProps) {
   };
 
   const handleWhatsApp = async () => {
-    trackEvent("whatsapp-shared", { type: viewMode === "staff" ? "staff" : "roster" });
-
-    // Desktop has no useful share path — wa.me URLs can't carry an attachment,
-    // and the Web Share API on desktop just opens a system sheet that can't reach
-    // WhatsApp. Save the PDF locally so the user can attach it manually.
+    // Desktop branch: window.open must run synchronously on the same tick as
+    // the click (Safari popup blocker). The unit test in
+    // sharePopupWhatsAppDesktop.test.ts splits this body on the marker below
+    // to enforce that contract — keep it.
     if (!isMobile || typeof navigator.share !== "function") {
-      await handleDownload();
+      const summary = buildScheduleShareText(selectedRosters, userShiftData, locale);
+      const text = summary || t("shareSchedule");
+      window.open(
+        `https://wa.me/?text=${encodeURIComponent(text)}`,
+        "_blank"
+      );
+      trackEvent("whatsapp-shared", { type: viewMode === "staff" ? "staff" : "roster" });
+      setOpen(false);
       return;
     }
 
-    // Mobile: native share with the PDF file attached (opens WhatsApp / share sheet)
+    // Mobile path (unchanged): native share with the PDF file attached
+    trackEvent("whatsapp-shared", { type: viewMode === "staff" ? "staff" : "roster" });
     const pdfs = await generatePdfs();
     if (pdfs.length === 0) return;
     try {

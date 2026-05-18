@@ -30,11 +30,20 @@ export function ScheduleSectionHeader({
         className="text-xs text-muted-foreground inline-flex items-center gap-1.5 tabular-nums"
         dir="ltr"
       >
-        <b className="text-foreground font-semibold">{t("positionsCount", { count: postsCount })}</b>
+        <span>
+          <b className="text-foreground font-semibold me-1">{postsCount}</b>{" "}
+          {t("positionsLabel")}
+        </span>
         <span className="text-border-strong">·</span>
-        <b className="text-foreground font-semibold">{t("shiftsPerDayShort", { count: shiftsPerDay })}</b>
+        <span>
+          <b className="text-foreground font-semibold me-1">{shiftsPerDay}</b>{" "}
+          {t("shiftsPerDayLabel")}
+        </span>
         <span className="text-border-strong">·</span>
-        <b className="text-foreground font-semibold">{t("shiftDurationShort", { duration: safeDuration.toFixed(1) })}</b>
+        <span>
+          <b className="text-foreground font-semibold me-1">{safeDuration.toFixed(1)}</b>{" "}
+          {t("avgShiftDurationLabel")}
+        </span>
       </span>
       <RosterSwitcher />
       {scheduleMode === "7d" && (

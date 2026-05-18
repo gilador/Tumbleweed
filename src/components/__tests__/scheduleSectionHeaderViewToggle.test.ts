@@ -49,3 +49,13 @@ describe("ScheduleSectionHeader daily/weekly view toggle styling", () => {
     expect(occurrences!.length).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe("ScheduleSectionHeader avg shift duration descriptor", () => {
+  it("renders the bold safeDuration number followed by the avgShiftDurationLabel descriptor", () => {
+    expect(SOURCE).toMatch(/safeDuration\.toFixed\(1\)/);
+    expect(SOURCE).toMatch(/t\("avgShiftDurationLabel"\)/);
+    expect(SOURCE).toMatch(
+      /safeDuration\.toFixed\(1\)[\s\S]*?t\("avgShiftDurationLabel"\)/
+    );
+  });
+});
